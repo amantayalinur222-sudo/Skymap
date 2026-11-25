@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Карта неба</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a phone star-finder app — deep indigo sky, purple figures, quiet round controls
+   IDEA: hold-up sky map: the whole screen is sky; a small readout tells where you point
+   PICTURE: full-screen indigo sky, violet constellation lines and names, orange ecliptic, glowing horizon
+   COLOUR and TYPE: indigo #07083f, violet #8a6cd8, lilac names, orange planets, amber accent #ffc21a; Roboto
+   LAYOUT: readout top-right, layer pill on the left, round action buttons bottom-right, settings as a full screen */
+:root{color-scheme:dark;--bg:#06072e;--ink:#eef0ff;--mute:#9ea6c8;--bar:rgba(18,22,52,.92);--line:rgba(255,255,255,.1);--acc:#ffc21a;--btn:#1d3043;--glass:linear-gradient(160deg,rgba(48,56,128,.5),rgba(10,12,40,.62));--blur:blur(16px) saturate(1.5);--sh:0 12px 32px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.1);--gl:1px solid rgba(255,255,255,.13)}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+body.red{--ink:#ff6b5a;--mute:#b0463a;--acc:#ff5a44;--line:rgba(255,90,68,.22);--bar:rgba(22,3,2,.95);--btn:#2a0905}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Roboto,system-ui,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;user-select:none}
+#sky{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+button,input,select{font:inherit;color:inherit}
+.chrome{transition:opacity .3s}
+body.hideui .chrome{opacity:0;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.chrome{transition:none}}
+.ib{width:44px;height:44px;flex:none;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;cursor:pointer;color:var(--ink)}
+.ib svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ib:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,.ev:focus-visible,.set:focus-visible,.mi:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#info{position:fixed;top:12px;right:10px;padding:12px 18px;border-radius:20px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);font-size:15px;pointer-events:none}
+#info dl{grid-template-columns:auto auto;gap:3px 24px;font-size:15px}
+#info dt{color:#98a2d8}#info dd{font-weight:500;color:#fff;font-variant-numeric:tabular-nums}
+#strip{position:fixed;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;padding:8px 6px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);border-radius:30px}
+#strip .ib{color:#7c86b4;transition:color .2s,background .2s,box-shadow .2s}
+#strip .ib:hover{color:#c9d0f5}
+#strip .ib[aria-pressed=true]{color:#ffd75a;background:radial-gradient(circle at 50% 40%,rgba(255,200,60,.34),rgba(255,140,0,.1));box-shadow:0 0 16px rgba(255,190,40,.3),inset 0 0 0 1px rgba(255,210,90,.35)}
+#strip hr{width:30px;border:0;border-top:1px solid var(--line);margin:2px auto}
+#strip #m-layers2{color:#9fd0ff}
+#btns{position:fixed;right:10px;bottom:14px;display:flex;gap:10px}
+#btns .ib{width:52px;height:52px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);color:#e3e8ff;transition:transform .15s,background .2s}
+#btns .ib:active{transform:scale(.92)}
+#btns #b-search{background:linear-gradient(145deg,#ffdf6e,#ff9a1a);border-color:rgba(255,230,150,.6);color:#2a1700;box-shadow:0 8px 24px rgba(255,160,30,.45),inset 0 1px 0 rgba(255,255,255,.5)}
+body.red #btns .ib{color:var(--ink);background:var(--btn);box-shadow:none}body.red #btns #b-search{color:#200;background:var(--acc)}
+#menu{position:fixed;z-index:4;right:10px;bottom:76px;min-width:230px;padding:6px 0;border-radius:14px;background:linear-gradient(165deg,rgba(44,50,116,.86),rgba(14,16,46,.92));backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);animation:rise .22s cubic-bezier(.2,.8,.2,1)}
+#menu[hidden]{display:none}
+.mi{display:block;width:100%;min-height:48px;padding:0 18px;border:0;background:none;text-align:left;font-size:16px;cursor:pointer}
+.mi:hover{background:rgba(255,255,255,.07)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);padding:10px 16px;border-radius:20px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);font-size:14px;white-space:nowrap;opacity:0;transition:opacity .25s;pointer-events:none;z-index:4}
+#toast.on{opacity:1}
+#timebar{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px 6px 4px 14px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);border-radius:28px;max-width:calc(100% - 12px)}
+#timebar[hidden]{display:none}
+#tbtext{font-size:13px;line-height:1.25;margin-right:6px;white-space:nowrap}
+#tbtext small{display:block;color:var(--mute)}
+.btn{min-height:44px;padding:0 16px;border:0;border-radius:22px;background:rgba(255,255,255,.09);font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap}
+.btn{transition:background .15s,transform .15s}.btn:hover{background:rgba(255,255,255,.16)}.btn:active{transform:scale(.97)}
+.btn.pri{background:linear-gradient(145deg,#ffdf6e,#ff9a1a);color:#2a1700;box-shadow:0 6px 18px rgba(255,160,30,.35)}
+body.red .btn.pri{background:var(--acc);box-shadow:none;color:#200}
+.sheet,.card{position:fixed;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 16px));background:linear-gradient(165deg,rgba(44,50,118,.84),rgba(12,14,42,.9));backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--gl);box-shadow:var(--sh);border-radius:24px;padding:18px;animation:rise .28s cubic-bezier(.2,.8,.2,1);max-height:calc(100dvh - 120px);overflow:auto;user-select:text;z-index:3}
+.sheet{top:12px}.card{bottom:80px}
+.sheet[hidden],.card[hidden]{display:none}
+.sheet h2,.card h2{margin:0 0 10px;font-size:22px;font-weight:700;line-height:1.15;color:#fff}
+@keyframes rise{from{opacity:0;transform:translate(-50%,12px)}}
+#menu{animation-name:fade}@keyframes fade{from{opacity:0;transform:translateY(8px)}}
+@media(prefers-reduced-motion:reduce){.sheet,.card,#menu{animation:none}}
+input[type=search],input[type=number],input[type=datetime-local],select{width:100%;min-height:46px;font-size:16px;padding:8px 14px;border-radius:23px;border:1px solid var(--line);background:rgba(255,255,255,.06)}
+select{border-radius:12px}select option{background:#14172f}
+.list{list-style:none;margin:8px 0 0;padding:0}
+.list button,.ev{width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:46px;padding:8px 10px;border:0;border-radius:10px;background:transparent;cursor:pointer}
+.list button:hover,.ev:hover{background:rgba(255,255,255,.07)}
+.list small,.ev small,.mute{color:var(--mute);font-size:13px;text-align:right}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:8px 0}
+.grid2 label{font-size:13px;color:var(--mute)}
+dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:0;font-size:15px}
+dt{color:var(--mute)}dd{margin:0;text-align:right;white-space:nowrap}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.kind{margin:-6px 0 10px;color:var(--mute);font-size:14px}
+.warn{margin:10px 0 0;font-size:14px;color:#ffcf6b}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+#perm{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:rgba(3,4,25,.9);font-size:17px;z-index:6}#perm[hidden]{display:none}#perm p{max-width:320px;margin:0 0 8px}
+#settings{position:fixed;inset:0;background:radial-gradient(120% 55% at 50% 0%,#262d70,#0a0d26 72%);overflow:auto;z-index:5;user-select:text}
+#settings[hidden]{display:none}
+.shead{position:sticky;top:0;display:flex;align-items:center;gap:12px;padding:10px 8px;background:rgba(18,22,58,.72);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid rgba(255,255,255,.08);font-size:26px;font-weight:700;z-index:1}
+.sec{margin:26px 20px 6px;color:var(--acc);font-size:19px;font-weight:500}
+.set{display:flex;align-items:center;gap:16px;width:100%;min-height:72px;padding:12px 20px;border:0;background:none;text-align:left;cursor:pointer;color:var(--ink)}
+.set:hover{background:rgba(255,255,255,.04)}
+.set .t{flex:1}.set b{display:block;font-size:18px;font-weight:400;line-height:1.3}.set span{display:block;font-size:14px;color:var(--mute);line-height:1.4;margin-top:2px}
+.val{color:var(--acc);font-size:17px;white-space:nowrap}
+.sw{flex:none;width:54px;height:32px;border-radius:16px;border:2px solid #485074;position:relative;transition:background .2s}
+.sw::after{content:'';position:absolute;top:5px;left:5px;width:18px;height:18px;border-radius:50%;background:#485074;transition:all .2s}
+.set[aria-checked=true] .sw{background:linear-gradient(135deg,#ffdf6e,#ff9a1a);border-color:#ffb43a;box-shadow:0 0 12px rgba(255,170,40,.35)}
+body.red .set[aria-checked=true] .sw{background:var(--acc);box-shadow:none}
+.set[aria-checked=true] .sw::after{left:25px;top:3px;width:22px;height:22px;background:#2a1f00}
+.set input{width:90px;flex:none;text-align:right}
+.note{margin:4px 20px 30px;font-size:13px;color:var(--mute)}
+body.red #info,body.red #strip,body.red .sheet,body.red .card,body.red #menu,body.red #timebar,body.red #toast{background:var(--bar);box-shadow:none;border-color:var(--line)}
+body.red #strip .ib[aria-pressed=true]{color:var(--acc);background:rgba(255,90,68,.18);box-shadow:none}
+body.red #info dt{color:var(--mute)}body.red #info dd,body.red .sheet h2,body.red .card h2{color:var(--ink)}
+body.red #settings,body.red .shead{background:#0d0201}
+@media(max-width:420px){#info{font-size:13px;padding:8px 12px}#info dl{font-size:13px;gap:2px 16px}#btns{gap:8px}#btns .ib{width:50px;height:50px}}
+</style>
+</head>
+<body>
+<canvas id="sky" aria-label="Карта звёздного неба. Тяните, чтобы осмотреться; щипок или колесо — масштаб; нажмите на объект для подробностей."></canvas>
+
+<div id="info" class="chrome"><dl id="infodl"></dl></div>
+<div id="strip" class="chrome" role="toolbar" aria-label="Слои"></div>
+<nav id="btns" class="chrome" aria-label="Действия">
+  <button class="ib" id="b-search" aria-label="Поиск"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg></button>
+  <button class="ib" id="b-time" aria-label="Путешествие во времени"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></button>
+  <button class="ib" id="b-night" aria-label="Ночной режим" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 1 1 9.5 5a6 6 0 0 0 9.5 9.5z"/></svg></button>
+  <button class="ib" id="b-sensor" aria-label="Режим управления"><svg viewBox="0 0 24 24" id="modeicon"></svg></button>
+  <button class="ib" id="b-menu" aria-label="Меню" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="18.5" r="1.3"/></svg></button>
+</nav>
+<div id="menu" hidden role="menu">
+  <button class="mi" id="b-place" role="menuitem">Место наблюдения</button>
+  <button class="mi" id="m-layers" role="menuitem">Слои</button>
+  <button class="mi" id="m-set" role="menuitem">Настройки</button>
+</div>
+
+<div id="toast" role="status"></div>
+<div id="perm" hidden><p>Небо будет двигаться вместе с телефоном. Наведите телефон на небо.</p><button class="btn" id="perm-ok">Включить датчики</button><button class="btn" id="perm-no" style="background:transparent">Ручной режим</button></div>
+
+<div id="timebar" hidden>
+  <div id="tbtext"></div>
+  <button class="ib" id="t-rw" aria-label="Медленнее / назад"><svg viewBox="0 0 24 24"><path d="M11 7l-6 5 6 5zM19 7l-6 5 6 5z"/></svg></button>
+  <button class="ib" id="t-pp" aria-label="Пуск / пауза"><svg viewBox="0 0 24 24" id="ppicon"><path d="M8 6v12l10-6z"/></svg></button>
+  <button class="ib" id="t-ff" aria-label="Быстрее"><svg viewBox="0 0 24 24"><path d="M5 7l6 5-6 5zM13 7l6 5-6 5z"/></svg></button>
+  <button class="btn" id="t-now">Сейчас</button>
+</div>
+
+<section class="sheet" id="sh-search" hidden>
+  <input type="search" id="q" placeholder="Звезда, планета, созвездие, M31…" autocomplete="off" aria-label="Поиск">
+  <ul class="list" id="res"></ul>
+</section>
+
+<section class="sheet" id="sh-time" hidden>
+  <h2>Путешествие во времени</h2>
+  <div id="events"></div>
+  <p class="mute" style="text-align:left;margin:12px 0 6px">Или выберите дату и время:</p>
+  <input type="datetime-local" id="dt" aria-label="Дата и время">
+  <div class="row"><button class="btn pri" id="go-dt">Перейти</button></div>
+</section>
+
+<section class="sheet" id="sh-place" hidden>
+  <h2>Место наблюдения</h2>
+  <select id="city" aria-label="Город"></select>
+  <div class="grid2">
+    <div><label for="lat">Широта, °</label><input type="number" id="lat" step="0.01" min="-90" max="90"></div>
+    <div><label for="lon">Долгота, °</label><input type="number" id="lon" step="0.01" min="-180" max="180"></div>
+  </div>
+  <button class="btn pri" id="apply" style="width:100%">Применить координаты</button>
+</section>
+
+<section class="sheet" id="sh-layers" hidden><h2>Слои</h2><div id="laylist"></div></section>
+<section class="card" id="card" hidden aria-live="polite"></section>
+<section id="settings" hidden aria-label="Настройки"><div class="shead"><button class="ib" id="set-back" aria-label="Назад"><svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>Настройки</div><div id="setbody"></div></section>
+
+<script>
+{
+const D=Math.PI/180,$=s=>document.querySelector(s);
+const CON={UMa:'Большая Медведица',UMi:'Малая Медведица',Cas:'Кассиопея',Ori:'Орион',Tau:'Телец',Gem:'Близнецы',CMi:'Малый Пёс',CMa:'Большой Пёс',Aur:'Возничий',Leo:'Лев',Vir:'Дева',Boo:'Волопас',CrB:'Северная Корона',Her:'Геркулес',Lyr:'Лира',Cyg:'Лебедь',Aql:'Орёл',Sco:'Скорпион',Sgr:'Стрелец',Peg:'Пегас',And:'Андромеда',Per:'Персей',Cep:'Цефей',Ari:'Овен',Cru:'Южный Крест',Crv:'Ворон',Lib:'Весы',Dra:'Дракон',Cet:'Кит',Hya:'Гидра',Oph:'Змееносец',PsA:'Южная Рыба',Eri:'Эридан',Car:'Киль',Vel:'Паруса',Pup:'Корма',Cen:'Центавр',Gru:'Журавль',Pav:'Павлин',Aqr:'Водолей',Cap:'Козерог',CVn:'Гончие Псы',Ser:'Змея',Cnc:'Рак',Vul:'Лисичка',Tri:'Треугольник',Psc:'Рыбы',Lep:'Заяц',Col:'Голубь',Com:'Волосы Вероники',Sge:'Стрела',Del:'Дельфин',Lup:'Волк',Ara:'Жертвенник',Phe:'Феникс',TrA:'Южный Треугольник',Lyn:'Рысь',Sct:'Щит'};
+const S=[
+['dubhe',11.062,61.75,1.79,'Дубхе','UMa','o'],['merak',11.031,56.38,2.37,'Мерак','UMa'],['phecda',11.897,53.69,2.44,'Фекда','UMa'],['megrez',12.257,57.03,3.31,'Мегрец','UMa'],['alioth',12.900,55.96,1.77,'Алиот','UMa'],['mizar',13.399,54.93,2.27,'Мицар','UMa'],['alkaid',13.792,49.31,1.86,'Бенетнаш','UMa','b'],
+['polaris',2.530,89.26,1.98,'Полярная','UMi','y'],['dumi',17.537,86.59,4.36,'Йильдун','UMi'],['eumi',16.766,82.04,4.21,'ε Малой Медведицы','UMi'],['zumi',15.734,77.79,4.32,'ζ Малой Медведицы','UMi'],['kochab',14.845,74.16,2.08,'Кохаб','UMi','o'],['pherkad',15.345,71.83,3.00,'Феркад','UMi'],['etaumi',16.292,75.76,4.95,'η Малой Медведицы','UMi'],
+['caph',0.153,59.15,2.27,'Каф','Cas'],['schedar',0.675,56.54,2.24,'Шедар','Cas','o'],['gcas',0.945,60.72,2.15,'Нави','Cas','b'],['ruchbah',1.430,60.24,2.68,'Рукбах','Cas'],['segin',1.907,63.67,3.38,'Сегин','Cas','b'],
+['betelgeuse',5.919,7.41,0.50,'Бетельгейзе','Ori','r'],['rigel',5.242,-8.20,0.13,'Ригель','Ori','b'],['bellatrix',5.419,6.35,1.64,'Беллатрикс','Ori','b'],['saiph',5.796,-9.67,2.06,'Саиф','Ori','b'],['alnitak',5.679,-1.94,1.77,'Альнитак','Ori','b'],['alnilam',5.604,-1.20,1.69,'Альнилам','Ori','b'],['mintaka',5.533,-0.30,2.23,'Минтака','Ori','b'],['meissa',5.585,9.93,3.39,'Мейсса','Ori','b'],
+['aldebaran',4.599,16.51,0.86,'Альдебаран','Tau','r'],['elnath',5.438,28.61,1.65,'Элнат','Tau','b'],['ztau',5.627,21.14,3.00,'ζ Тельца','Tau','b'],['gtau',4.330,15.63,3.65,'γ Тельца','Tau','o'],['etau',4.477,19.18,3.53,'Аин','Tau','o'],['dtau',4.382,17.54,3.76,'δ Тельца','Tau','o'],['alcyone',3.791,24.11,2.87,'Альциона','Tau','b'],
+['castor',7.577,31.89,1.58,'Кастор','Gem'],['pollux',7.755,28.03,1.14,'Поллукс','Gem','o'],['alhena',6.629,16.40,1.93,'Альхена','Gem'],['mebsuta',6.732,25.13,2.98,'Мебсута','Gem','y'],['wasat',7.335,21.98,3.53,'Васат','Gem'],['tejat',6.383,22.51,2.87,'Тейят','Gem','r'],
+['procyon',7.655,5.22,0.34,'Процион','CMi','y'],['gomeisa',7.453,8.29,2.89,'Гомейза','CMi','b'],
+['sirius',6.752,-16.72,-1.46,'Сириус','CMa','b'],['mirzam',6.378,-17.96,1.98,'Мирзам','CMa','b'],['adhara',6.977,-28.97,1.50,'Адара','CMa','b'],['wezen',7.140,-26.39,1.83,'Везен','CMa','y'],['aludra',7.402,-29.30,2.45,'Алудра','CMa','b'],
+['capella',5.278,46.00,0.08,'Капелла','Aur','y'],['menkalinan',5.992,44.95,1.90,'Менкалинан','Aur'],['thaur',5.995,37.21,2.62,'θ Возничего','Aur'],['hassaleh',4.950,33.17,2.69,'Хассалех','Aur','o'],['eaur',5.032,43.82,2.99,'Альмааз','Aur','y'],
+['regulus',10.140,11.97,1.35,'Регул','Leo','b'],['denebola',11.818,14.57,2.13,'Денебола','Leo'],['algieba',10.333,19.84,2.08,'Альгиеба','Leo','o'],['zosma',11.235,20.52,2.56,'Зосма','Leo'],['chertan',11.237,15.43,3.33,'Шертан','Leo'],['etaleo',10.122,16.76,3.48,'η Льва','Leo'],['adhafera',10.278,23.42,3.43,'Адхафера','Leo'],['muleo',9.879,26.01,3.88,'μ Льва','Leo','o'],['eleo',9.764,23.77,2.98,'Рас Эласад','Leo','y'],
+['spica',13.420,-11.16,0.97,'Спика','Vir','b'],['porrima',12.694,-1.45,2.74,'Поррима','Vir'],['vindemiatrix',13.036,10.96,2.85,'Виндемиатрикс','Vir','y'],
+['arcturus',14.261,19.18,-0.05,'Арктур','Boo','o'],['izar',14.750,27.07,2.37,'Ицар','Boo','o'],['seginus',14.535,38.31,3.03,'Сегинус','Boo'],['nekkar',15.032,40.39,3.49,'Неккар','Boo','y'],['dboo',15.258,33.31,3.47,'δ Волопаса','Boo','y'],['muphrid',13.911,18.40,2.68,'Муфрид','Boo','y'],
+['alphecca',15.578,26.71,2.23,'Гемма','CrB'],['bcrb',15.464,29.11,3.66,'Нусакан','CrB'],['thcrb',15.549,31.36,4.14,'θ Сев. Короны','CrB','b'],['gcrb',15.713,26.30,3.81,'γ Сев. Короны','CrB'],['dcrb',15.827,26.07,4.59,'δ Сев. Короны','CrB','y'],['ecrb',15.960,26.88,4.14,'ε Сев. Короны','CrB','o'],
+['eher',17.004,30.93,3.92,'ε Геркулеса','Her'],['zher',16.688,31.60,2.81,'ζ Геркулеса','Her','y'],['etaher',16.715,38.92,3.48,'η Геркулеса','Her','y'],['pher',17.251,36.81,3.16,'π Геркулеса','Her','o'],['kornephoros',16.504,21.49,2.77,'Корнефорос','Her','y'],
+['vega',18.616,38.78,0.03,'Вега','Lyr','b'],['sheliak',18.835,33.36,3.52,'Шелиак','Lyr','b'],['sulafat',18.982,32.69,3.25,'Сулафат','Lyr','b'],['zlyr',18.746,37.61,4.36,'ζ Лиры','Lyr'],['dlyr',18.908,36.90,4.30,'δ Лиры','Lyr','r'],['elyr',18.739,39.67,4.67,'ε Лиры (двойная)','Lyr'],
+['deneb',20.690,45.28,1.25,'Денеб','Cyg'],['sadr',20.370,40.26,2.23,'Садр','Cyg','y'],['gienahc',20.770,33.97,2.48,'Гиена (ε Лебедя)','Cyg','o'],['dcyg',19.750,45.13,2.87,'δ Лебедя','Cyg','b'],['albireo',19.512,27.96,3.08,'Альбирео','Cyg','o'],
+['altair',19.846,8.87,0.77,'Альтаир','Aql'],['tarazed',19.771,10.61,2.72,'Таразед','Aql','o'],['alshain',19.922,6.41,3.71,'Альшаин','Aql','y'],['zaql',19.090,13.86,2.99,'ζ Орла','Aql'],['daql',19.425,3.11,3.36,'δ Орла','Aql'],['thaql',20.188,-0.82,3.24,'θ Орла','Aql','b'],['laql',19.104,-4.88,3.43,'λ Орла','Aql','b'],
+['antares',16.490,-26.43,1.06,'Антарес','Sco','r'],['graffias',16.091,-19.81,2.62,'Акраб','Sco','b'],['dschubba',16.006,-22.62,2.29,'Дшубба','Sco','b'],['pisco',15.981,-26.11,2.89,'π Скорпиона','Sco','b'],['sigsco',16.353,-25.59,2.90,'Аль Нийат','Sco','b'],['tausco',16.598,-28.22,2.82,'τ Скорпиона','Sco','b'],['epssco',16.836,-34.29,2.29,'Ларавасат','Sco','o'],['musco',16.864,-38.05,3.00,'μ Скорпиона','Sco','b'],['zetsco',16.910,-42.36,3.62,'ζ Скорпиона','Sco','o'],['etasco',17.203,-43.24,3.33,'η Скорпиона','Sco'],['thesco',17.622,-43.00,1.86,'Сарган','Sco','y'],['iotsco',17.793,-40.13,2.99,'ι Скорпиона','Sco','y'],['kapsco',17.708,-39.03,2.39,'Гиртаб','Sco','b'],['shaula',17.560,-37.10,1.62,'Шаула','Sco','b'],['lesath',17.513,-37.30,2.70,'Лесат','Sco','b'],
+['kausaus',18.403,-34.38,1.85,'Каус Аустралис','Sgr','b'],['nunki',18.921,-26.30,2.05,'Нунки','Sgr','b'],['ascella',19.043,-29.88,2.60,'Аскелла','Sgr'],['kausmedia',18.350,-29.83,2.70,'Каус Медиа','Sgr','o'],['kausbor',18.466,-25.42,2.81,'Каус Бореалис','Sgr','o'],['phisgr',18.761,-26.99,3.17,'φ Стрельца','Sgr','b'],['tausgr',19.116,-27.67,3.32,'τ Стрельца','Sgr','o'],['alnasl',18.097,-30.42,2.99,'Альнасль','Sgr','o'],
+['markab',23.079,15.21,2.48,'Маркаб','Peg','b'],['scheat',23.063,28.08,2.42,'Шеат','Peg','r'],['algenib',0.220,15.18,2.83,'Альгениб','Peg','b'],['enif',21.736,9.88,2.39,'Эниф','Peg','o'],['thpeg',22.170,6.20,3.53,'Биэм','Peg'],['zpeg',22.691,10.83,3.40,'Хомам','Peg','b'],['etapeg',22.717,30.22,2.94,'Матар','Peg','y'],
+['alpheratz',0.140,29.09,2.06,'Альферац','And','b'],['mirach',1.162,35.62,2.05,'Мирах','And','r'],['almach',2.065,42.33,2.10,'Аламак','And','o'],['dand',0.655,30.86,3.27,'δ Андромеды','And','o'],['muand',0.946,38.50,3.87,'μ Андромеды','And'],
+['mirfak',3.405,49.86,1.79,'Мирфак','Per','y'],['algol',3.136,40.96,2.12,'Алголь (переменная)','Per','b'],['gper',3.080,53.51,2.91,'γ Персея','Per','y'],['dper',3.715,47.79,3.01,'δ Персея','Per','b'],['eper',3.964,40.01,2.89,'ε Персея','Per','b'],['zper',3.902,31.88,2.85,'Менкиб','Per','b'],['etaper',2.845,55.90,3.76,'Мирам','Per','o'],['rhoper',3.086,38.84,3.39,'Горгонея Терция','Per','r'],
+['alderamin',21.310,62.59,2.45,'Альдерамин','Cep'],['alfirk',21.478,70.56,3.23,'Альфирк','Cep','b'],['errai',23.656,77.63,3.21,'Эррай','Cep','o'],['icep',22.828,66.20,3.52,'ι Цефея','Cep','o'],['zcep',22.181,58.20,3.35,'ζ Цефея','Cep','o'],
+['hamal',2.120,23.46,2.00,'Хамаль','Ari','o'],['sheratan',1.911,20.81,2.64,'Шератан','Ari'],['mesarthim',1.892,19.29,3.88,'Мезартим','Ari'],
+['acrux',12.443,-63.10,0.77,'Акрукс','Cru','b'],['mimosa',12.795,-59.69,1.25,'Мимоза','Cru','b'],['gacrux',12.519,-57.11,1.63,'Гакрукс','Cru','r'],['dcru',12.252,-58.75,2.79,'δ Южного Креста','Cru','b'],
+['gienah',12.263,-17.54,2.59,'Гиена','Crv','b'],['algorab',12.498,-16.52,2.94,'Альгораб','Crv'],['kraz',12.573,-23.40,2.65,'Краз','Crv','y'],['ecrv',12.169,-22.62,3.00,'Минкар','Crv','o'],
+['zubenelgenubi',14.848,-16.04,2.75,'Зубен Эльгенуби','Lib'],['zubeneschamali',15.283,-9.38,2.61,'Зубен Эльшемали','Lib','b'],
+['eltanin',17.943,51.49,2.24,'Этамин','Dra','o'],['rastaban',17.507,52.30,2.79,'Растабан','Dra','y'],['thuban',14.073,64.38,3.65,'Тубан','Dra'],
+['fomalhaut',22.961,-29.62,1.16,'Фомальгаут','PsA'],['diphda',0.727,-17.99,2.04,'Дифда','Cet','o'],['menkar',3.038,4.09,2.54,'Менкар','Cet','r'],['alphard',9.460,-8.66,1.98,'Альфард','Hya','o'],['rasalhague',17.582,12.56,2.08,'Расальхаг','Oph'],['sabik',17.173,-15.72,2.43,'Сабик','Oph'],
+['canopus',6.399,-52.70,-0.74,'Канопус','Car','y'],['achernar',1.629,-57.24,0.46,'Ахернар','Eri','b'],['rigil',14.660,-60.84,-0.27,'Ригиль Кентаврус','Cen','y'],['hadar',14.064,-60.37,0.61,'Хадар','Cen','b'],['alnair',22.137,-46.96,1.74,'Альнаир','Gru','b'],['peacock',20.427,-56.74,1.94,'Пикок','Pav','b'],['avior',8.375,-59.51,1.86,'Авиор','Car','o'],['miaplacidus',9.220,-69.72,1.68,'Миаплацидус','Car'],['suhail',9.133,-43.43,2.21,'Альсухайль','Vel','o'],['regor',8.159,-47.34,1.83,'Регор','Vel','b'],['naos',8.060,-40.00,2.25,'Наос','Pup','b'],
+['unuk',15.738,6.43,2.63,'Унук аль-Хай','Ser','o'],['corcaroli',12.934,38.32,2.89,'Сердце Карла','CVn'],['dengedi',21.784,-16.13,2.85,'Денеб Альгеди','Cap'],['sadalsuud',21.526,-5.57,2.90,'Садальсууд','Aqr','y'],['sadalmelik',22.096,-0.32,2.95,'Садальмелик','Aqr','y']];
+S.push(
+['chiuma',11.767,47.78,3.71,'Альказальдах','UMa','o'],['psiuma',11.161,44.50,3.01,'ψ Большой Медведицы','UMa','o'],['muuma',10.372,41.50,3.05,'Тания Аустралис','UMa','r'],['lauma',10.285,42.91,3.45,'Тания Бореалис','UMa'],['nuuma',11.308,33.09,3.48,'Алула Бореалис','UMa','o'],['xiuma',11.303,31.53,3.79,'Алула Аустралис','UMa','y'],['upsuma',9.849,59.04,3.80,'υ Большой Медведицы','UMa'],['thuma',9.548,51.68,3.17,'θ Большой Медведицы','UMa','y'],['iuma',8.987,48.04,3.14,'Талита','UMa'],['kuma',9.060,47.16,3.60,'Альфикра','UMa'],['h23uma',9.525,63.06,3.65,'23 Большой Медведицы','UMa'],['ouma',8.504,60.72,3.36,'Мускида','UMa','y'],
+['pi3ori',4.830,6.96,3.19,'Табит','Ori'],['pi2ori',4.843,8.90,4.35,'π² Ориона','Ori'],['pi4ori',4.853,5.61,3.69,'π⁴ Ориона','Ori','b'],['pi5ori',4.904,2.44,3.72,'π⁵ Ориона','Ori','b'],['muori',6.065,9.65,4.12,'μ Ориона','Ori'],['xiori',6.247,14.21,4.48,'ξ Ориона','Ori','b'],['iori',5.590,-5.91,2.77,'Хатиса','Ori','b'],['etaori',5.408,-2.40,3.36,'η Ориона','Ori','b'],
+['taugem',7.186,30.25,4.41,'τ Близнецов','Gem','o'],['thgem',6.880,33.96,3.60,'θ Близнецов','Gem'],['propus',6.248,22.51,3.30,'Пропус','Gem','r'],['mekbuda',7.068,20.57,3.79,'Мекбуда','Gem','y'],['lgem',7.301,16.54,3.58,'λ Близнецов','Gem'],['igem',7.429,27.80,3.79,'ι Близнецов','Gem','o'],
+['o2cma',7.050,-23.83,3.02,'ο² Большого Пса','CMa','b'],['furud',6.338,-30.06,3.02,'Фуруд','CMa','b'],['rhoboo',14.530,30.37,3.58,'ρ Волопаса','Boo','o'],
+['zavijava',11.845,1.76,3.60,'Завиджава','Vir','y'],['zaniah',12.332,-0.67,3.89,'Заниах','Vir'],['minelauva',12.927,3.40,3.38,'Минелаува','Vir','r'],['heze',13.578,-0.60,3.37,'Хезе','Vir'],
+['rasalgethi',17.244,14.39,3.08,'Рас Альгети','Her','r'],['dher',17.250,24.84,3.14,'Сарин','Her'],['thher',17.937,37.25,3.86,'θ Геркулеса','Her','o'],['iher',17.657,46.01,3.80,'ι Геркулеса','Her','b'],
+['mupeg',22.835,24.60,3.48,'Садалбари','Peg','y'],['lapeg',22.775,23.57,3.95,'λ Пегаса','Peg','y'],['ipeg',22.117,25.35,3.77,'ι Пегаса','Peg'],['kpeg',21.745,25.65,4.13,'κ Пегаса','Peg'],
+['glib',15.592,-14.79,3.91,'Зубен Эльакраб','Lib','o'],['siglib',15.068,-25.28,3.29,'Брахиум','Lib','r'],
+['aldhibah',17.146,65.71,3.17,'Альдиба','Dra','b'],['etadra',16.400,61.51,2.73,'Атаис','Dra','y'],['edasich',15.415,58.97,3.29,'Эдасих','Dra','o'],['altais',19.209,67.66,3.07,'Альтаис','Dra','y'],['grumium',17.892,56.87,3.75,'Грумиум','Dra','o'],['kapdra',12.558,69.79,3.87,'κ Дракона','Dra','b'],['giausar',11.523,69.33,3.84,'Гиаузар','Dra','r'],
+['etacyg',19.938,35.08,3.89,'η Лебедя','Cyg','o'],['zcyg',21.216,30.23,3.21,'ζ Лебедя','Cyg','y'],['kcyg',19.285,53.37,3.80,'κ Лебедя','Cyg','y'],['icyg',19.495,51.73,3.79,'ι Лебедя','Cyg'],
+['ecen',13.665,-53.47,2.29,'ε Центавра','Cen','b'],['etacen',14.592,-42.16,2.33,'η Центавра','Cen','b'],['zcen',13.926,-47.29,2.55,'ζ Центавра','Cen','b'],['gcen',12.692,-48.96,2.17,'Мулифейн','Cen'],['dcen',12.139,-50.72,2.60,'δ Центавра','Cen','b'],['menkent',14.111,-36.37,2.06,'Менкент','Cen','o'],
+['skat',22.911,-15.82,3.27,'Скат','Aqr'],['gaqr',22.361,-1.39,3.84,'Садахбия','Aqr'],['zaqr',22.481,-0.02,3.65,'ζ Водолея','Aqr','y'],['etaaqr',22.589,-0.12,4.02,'η Водолея','Aqr','b'],['laqr',22.877,-7.58,3.74,'λ Водолея','Aqr','r'],['albali',20.795,-9.50,3.77,'Альбали','Aqr'],
+['gcet',2.722,3.24,3.47,'Кафальджидма','Cet'],['dcet',2.658,0.33,4.07,'δ Кита','Cet','b'],['mira',2.322,-2.98,5.0,'Мира (переменная)','Cet','r'],['zcet',1.858,-10.34,3.73,'Батен Кайтос','Cet','o'],['tcet',1.734,-15.94,3.50,'τ Кита','Cet','y'],['icet',0.324,-8.82,3.56,'ι Кита','Cet','o'],['thcet',1.400,-8.18,3.60,'θ Кита','Cet','o'],['etacet',1.143,-10.18,3.45,'η Кита','Cet','o'],
+['dhya',8.628,5.70,4.16,'δ Гидры','Hya'],['ehya',8.780,6.42,3.38,'ε Гидры','Hya','y'],['zhya',8.923,5.95,3.11,'ζ Гидры','Hya','o'],['etahya',8.720,3.40,4.30,'η Гидры','Hya','b'],['shya',8.645,3.34,4.44,'σ Гидры','Hya','o'],['ihya',9.664,-1.14,3.91,'ι Гидры','Hya','o'],['muhya',10.434,-16.84,3.81,'μ Гидры','Hya','o'],['nuhya',10.827,-16.19,3.11,'ν Гидры','Hya','o'],['xihya',11.550,-31.86,3.54,'ξ Гидры','Hya','y'],['ghya',13.315,-23.17,3.00,'γ Гидры','Hya','y'],['pihya',14.106,-26.68,3.27,'π Гидры','Hya','o'],
+['cebalrai',17.725,4.57,2.76,'Цельбальрай','Oph','o'],['koph',16.961,9.38,3.20,'κ Змееносца','Oph','o'],['dophi',16.239,-3.69,2.74,'Йед Приор','Oph','r'],['eoph',16.305,-4.69,3.24,'Йед Постериор','Oph','y'],['zoph',16.619,-10.57,2.54,'ζ Змееносца','Oph','b'],['nuoph',17.984,-9.77,3.32,'ν Змееносца','Oph','o'],
+['bser',15.770,15.42,3.67,'β Змеи','Ser'],['dser',15.580,10.54,3.80,'δ Змеи','Ser'],['eser',15.847,4.48,3.71,'ε Змеи','Ser'],['muser',15.827,-3.43,3.53,'μ Змеи','Ser'],['gser',15.941,15.66,3.85,'γ Змеи','Ser','y'],
+['algedi',20.300,-12.54,3.57,'Альгеди','Cap','y'],['dabih',20.350,-14.78,3.05,'Дабих','Cap','o'],['psicap',20.768,-25.27,4.14,'ψ Козерога','Cap'],['omcap',20.864,-26.92,4.11,'ω Козерога','Cap','r'],['zcap',21.444,-22.41,3.74,'ζ Козерога','Cap','y'],['nashira',21.668,-16.66,3.68,'Нашира','Cap'],['thcap',21.099,-17.23,4.07,'θ Козерога','Cap'],
+['gpsc',23.286,3.28,3.69,'γ Рыб','Psc','y'],['thpsc',23.466,6.38,4.27,'θ Рыб','Psc','o'],['ipsc',23.666,5.63,4.13,'ι Рыб','Psc'],['lpsc',23.700,1.78,4.50,'λ Рыб','Psc'],['kpsc',23.449,1.26,4.94,'κ Рыб','Psc'],['ompsc',23.988,6.86,4.01,'ω Рыб','Psc'],['alrescha',2.034,2.76,3.82,'Альриша','Psc'],['opsc',1.756,9.16,4.26,'ο Рыб','Psc','y'],['etapsc',1.525,15.35,3.62,'Альфарг','Psc','y'],
+['tarf',8.275,9.19,3.52,'Тарф','Cnc','o'],['dcnc',8.745,18.15,3.94,'Южный Ослик','Cnc','o'],['gcnc',8.721,21.47,4.66,'Северный Ослик','Cnc'],['icnc',8.778,28.76,4.02,'ι Рака','Cnc','y'],['acubens',8.975,11.86,4.25,'Акубенс','Cnc'],
+['arneb',5.546,-17.82,2.58,'Арнеб','Lep','y'],['nihal',5.471,-20.76,2.84,'Нихал','Lep','y'],['elep',5.091,-22.37,3.19,'ε Зайца','Lep','o'],['mulep',5.216,-16.21,3.31,'μ Зайца','Lep','b'],['zlep',5.783,-14.82,3.55,'ζ Зайца','Lep'],['glep',5.741,-22.45,3.60,'γ Зайца','Lep','y'],['dlep',5.855,-20.88,3.81,'δ Зайца','Lep','o'],['etalep',5.940,-14.17,3.71,'η Зайца','Lep'],
+['phact',5.661,-34.07,2.65,'Факт','Col','b'],['wazn',5.849,-35.77,3.12,'Вазн','Col','o'],
+['atri',1.885,29.58,3.42,'Мотах','Tri','y'],['btri',2.159,34.99,3.00,'β Треугольника','Tri'],['gtri',2.289,33.85,4.01,'γ Треугольника','Tri'],
+['acom',13.166,17.53,4.32,'Диадема','Com','y'],['bcom',13.198,27.88,4.26,'β Волос Вероники','Com','y'],['gcom',12.449,28.27,4.35,'γ Волос Вероники','Com','o'],['chara',12.562,41.36,4.26,'Хара','CVn','y'],
+['gsge',19.979,19.49,3.47,'γ Стрелы','Sge','r'],['dsge',19.790,18.53,3.82,'δ Стрелы','Sge','r'],['asge',19.668,18.01,4.37,'Шам','Sge','y'],['bsge',19.684,17.48,4.37,'β Стрелы','Sge','y'],
+['adel',20.661,15.91,3.77,'Суалокин','Del','b'],['bdel',20.626,14.60,3.63,'Ротанев','Del'],['gdel',20.777,16.12,4.27,'γ Дельфина','Del','y'],['ddel',20.724,15.07,4.43,'δ Дельфина','Del'],['edel',20.554,11.30,4.03,'Альдулфин','Del','b'],
+['alup',14.699,-47.39,2.30,'α Волка','Lup','b'],['blup',14.976,-43.13,2.68,'β Волка','Lup','b'],['glup',15.586,-41.17,2.78,'γ Волка','Lup','b'],['aara',17.531,-49.88,2.95,'α Жертвенника','Ara','b'],['bara',17.422,-55.53,2.85,'β Жертвенника','Ara','o'],
+['cursa',5.131,-5.09,2.79,'Курса','Eri'],['zaurak',3.967,-13.51,2.95,'Заурак','Eri','r'],['deri',3.721,-9.76,3.52,'Рана','Eri','y'],['eeri',3.549,-9.46,3.73,'ε Эридана','Eri','o'],['etaeri',2.940,-8.90,3.89,'Азха','Eri','o'],['acamar',2.971,-40.30,2.88,'Акамар','Eri'],
+['ankaa',0.438,-42.31,2.40,'Анкаа','Phe','o'],['atria',16.811,-69.03,1.91,'Атрия','TrA','o'],['alyn',9.351,34.39,3.13,'α Рыси','Lyn','r'],['anser',19.478,24.66,4.44,'Ансер','Vul','r'],['etaaur',5.109,41.23,3.17,'η Возничего','Aur','b'],['zaur',5.041,41.08,3.75,'ζ Возничего','Aur','o'],['dcep',22.486,58.42,3.9,'δ Цефея (переменная)','Cep','y']);
+const L={UMa:'dubhe merak,merak phecda,phecda megrez,megrez dubhe,megrez alioth,alioth mizar,mizar alkaid',UMi:'polaris dumi,dumi eumi,eumi zumi,zumi kochab,kochab pherkad,pherkad etaumi,etaumi zumi',Cas:'caph schedar,schedar gcas,gcas ruchbah,ruchbah segin',Ori:'betelgeuse alnitak,bellatrix mintaka,alnitak alnilam,alnilam mintaka,alnitak saiph,mintaka rigel,betelgeuse meissa,bellatrix meissa,betelgeuse bellatrix',Tau:'gtau dtau,dtau etau,etau elnath,gtau aldebaran,aldebaran ztau',Gem:'castor pollux,castor mebsuta,mebsuta tejat,pollux wasat,wasat alhena',CMi:'procyon gomeisa',CMa:'mirzam sirius,sirius wezen,wezen adhara,wezen aludra',Aur:'capella menkalinan,menkalinan thaur,thaur elnath,elnath hassaleh,hassaleh eaur,eaur capella',Leo:'regulus etaleo,etaleo algieba,algieba adhafera,adhafera muleo,muleo eleo,algieba zosma,zosma denebola,denebola chertan,chertan regulus,zosma chertan',Vir:'spica porrima,porrima vindemiatrix',Boo:'arcturus izar,izar dboo,dboo nekkar,nekkar seginus,seginus arcturus,arcturus muphrid',CrB:'thcrb bcrb,bcrb alphecca,alphecca gcrb,gcrb dcrb,dcrb ecrb',Her:'eher zher,zher etaher,etaher pher,pher eher,zher kornephoros',Lyr:'vega zlyr,vega elyr,zlyr sheliak,sheliak sulafat,sulafat dlyr,dlyr zlyr',Cyg:'deneb sadr,sadr albireo,dcyg sadr,sadr gienahc',Aql:'tarazed altair,altair alshain,altair daql,daql laql,daql zaql,alshain thaql',Sco:'graffias dschubba,dschubba pisco,dschubba sigsco,sigsco antares,antares tausco,tausco epssco,epssco musco,musco zetsco,zetsco etasco,etasco thesco,thesco iotsco,iotsco kapsco,kapsco shaula,shaula lesath',Sgr:'alnasl kausmedia,kausmedia kausaus,kausaus alnasl,kausmedia kausbor,kausbor phisgr,phisgr kausmedia,phisgr nunki,nunki tausgr,tausgr ascella,ascella phisgr,ascella kausaus',Peg:'markab scheat,scheat alpheratz,alpheratz algenib,algenib markab,markab zpeg,zpeg thpeg,thpeg enif,scheat etapeg',And:'alpheratz dand,dand mirach,mirach almach,mirach muand',Per:'etaper gper,gper mirfak,mirfak dper,dper eper,eper zper,mirfak algol,algol rhoper',Cep:'alderamin alfirk,alfirk errai,errai icep,icep zcep,zcep alderamin,icep alfirk',Ari:'hamal sheratan,sheratan mesarthim',Cru:'acrux gacrux,mimosa dcru',Crv:'gienah algorab,algorab kraz,kraz ecrv,ecrv gienah',Lib:'zubenelgenubi zubeneschamali',Dra:'rastaban eltanin',Cen:'rigil hadar',Aqr:'sadalmelik sadalsuud'};
+Object.assign(L,{
+UMa:'dubhe merak,merak phecda,phecda megrez,megrez dubhe,megrez alioth,alioth mizar,mizar alkaid,phecda chiuma,chiuma nuuma,nuuma xiuma,chiuma psiuma,psiuma muuma,muuma lauma,merak upsuma,upsuma thuma,thuma iuma,iuma kuma,dubhe h23uma,h23uma ouma,ouma upsuma',
+Ori:L.Ori+',bellatrix pi3ori,pi2ori pi3ori,pi3ori pi4ori,pi4ori pi5ori,betelgeuse muori,muori xiori',
+Gem:'castor pollux,castor taugem,taugem thgem,castor mebsuta,mebsuta tejat,tejat propus,pollux wasat,wasat mekbuda,mekbuda alhena,wasat lgem,pollux igem',
+CMa:'mirzam sirius,sirius o2cma,o2cma wezen,wezen adhara,wezen aludra,adhara furud',
+Boo:'arcturus izar,izar dboo,dboo nekkar,nekkar seginus,seginus rhoboo,rhoboo arcturus,arcturus muphrid',
+Vir:'spica porrima,porrima vindemiatrix,porrima minelauva,minelauva vindemiatrix,porrima zaniah,zaniah zavijava,spica heze,heze minelauva',
+Her:'eher zher,zher etaher,etaher pher,pher eher,zher kornephoros,eher dher,dher rasalgethi,pher thher,thher iher',
+Peg:L.Peg+',scheat mupeg,mupeg lapeg,lapeg ipeg,ipeg kpeg',
+Lib:'zubenelgenubi zubeneschamali,zubeneschamali glib,zubenelgenubi siglib,glib siglib',
+Dra:'rastaban eltanin,eltanin grumium,grumium rastaban,grumium altais,altais aldhibah,aldhibah etadra,etadra edasich,edasich thuban,thuban kapdra,kapdra giausar',
+Cyg:'deneb sadr,sadr etacyg,etacyg albireo,dcyg sadr,sadr gienahc,gienahc zcyg,dcyg icyg,icyg kcyg',
+Cen:'rigil hadar,hadar ecen,ecen zcen,zcen etacen,ecen gcen,gcen dcen,zcen menkent',
+Aqr:'albali sadalsuud,sadalsuud sadalmelik,sadalmelik gaqr,gaqr zaqr,zaqr etaaqr,sadalsuud laqr,laqr skat',
+Cet:'menkar gcet,gcet dcet,dcet mira,mira zcet,zcet tcet,tcet diphda,diphda icet,zcet thcet,thcet etacet,etacet diphda',
+Hya:'dhya ehya,ehya zhya,zhya etahya,etahya shya,shya dhya,zhya ihya,ihya alphard,alphard muhya,muhya nuhya,nuhya xihya,xihya ghya,ghya pihya',
+Oph:'rasalhague koph,koph dophi,dophi eoph,eoph zoph,zoph sabik,sabik nuoph,nuoph cebalrai,cebalrai rasalhague',
+Ser:'gser bser,bser dser,dser unuk,unuk eser,eser muser',
+Cap:'algedi dabih,dabih psicap,psicap omcap,omcap zcap,zcap dengedi,dengedi nashira,nashira thcap,thcap algedi',
+Psc:'gpsc thpsc,thpsc ipsc,ipsc lpsc,lpsc kpsc,kpsc gpsc,ipsc ompsc,ompsc alrescha,alrescha opsc,opsc etapsc',
+Cnc:'tarf dcnc,dcnc gcnc,gcnc icnc,dcnc acubens',
+Lep:'mulep arneb,arneb nihal,nihal elep,elep mulep,arneb zlep,zlep etalep,etalep dlep,dlep glep,glep nihal',
+Col:'phact wazn',Tri:'atri btri,btri gtri,gtri atri',Com:'gcom bcom,bcom acom',CVn:'corcaroli chara',Sge:'gsge dsge,dsge asge,dsge bsge',
+Del:'edel bdel,bdel adel,adel gdel,gdel ddel,ddel bdel',Lup:'alup blup,blup glup',Ara:'aara bara',Eri:'cursa zaurak,zaurak deri,deri eeri,eeri etaeri',
+Aur:L.Aur+',capella etaaur,etaaur zaur'});
+const DSO=[['M31','Туманность Андромеды','галактика',0.712,41.27,3.4,'And'],['M33','Галактика Треугольника','галактика',1.564,30.66,5.7,'Tri'],['M42','Туманность Ориона','туманность',5.588,-5.39,4.0,'Ori'],['M78','M78','туманность',5.779,0.08,8.3,'Ori'],['M1','Крабовидная туманность','туманность',5.575,22.01,8.4,'Tau'],['M45','Плеяды','рассеянное скопление',3.783,24.12,1.6,'Tau'],['M44','Ясли','рассеянное скопление',8.667,19.67,3.7,'Cnc'],['M67','M67','рассеянное скопление',8.855,11.81,6.1,'Cnc'],['M35','M35','рассеянное скопление',6.148,24.33,5.3,'Gem'],['M36','M36','рассеянное скопление',5.602,34.14,6.3,'Aur'],['M37','M37','рассеянное скопление',5.873,32.55,6.2,'Aur'],['M38','M38','рассеянное скопление',5.478,35.83,7.4,'Aur'],['M41','M41','рассеянное скопление',6.767,-20.72,4.5,'CMa'],['M46','M46','рассеянное скопление',7.696,-14.82,6.1,'Pup'],['M47','M47','рассеянное скопление',7.610,-14.50,4.2,'Pup'],['M48','M48','рассеянное скопление',8.230,-5.80,5.5,'Hya'],['M34','M34','рассеянное скопление',2.702,42.78,5.5,'Per'],['NGC 869/884','Двойное скопление','рассеянное скопление',2.35,57.13,4.3,'Per'],['M39','M39','рассеянное скопление',21.537,48.43,4.6,'Cyg'],['M81','Галактика Боде','галактика',9.926,69.07,6.9,'UMa'],['M82','Галактика Сигара','галактика',9.931,69.68,8.4,'UMa'],['M101','Галактика Вертушка','галактика',14.053,54.35,7.9,'UMa'],['M97','Туманность Сова','планетарная туманность',11.248,55.02,9.9,'UMa'],['M51','Галактика Водоворот','галактика',13.498,47.20,8.4,'CVn'],['M3','M3','шаровое скопление',13.703,28.38,6.2,'CVn'],['M64','Галактика Чёрный Глаз','галактика',12.945,21.68,8.5,'Com'],['M87','M87','галактика',12.514,12.39,8.6,'Vir'],['M104','Галактика Сомбреро','галактика',12.666,-11.62,8.0,'Vir'],['M5','M5','шаровое скопление',15.310,2.08,5.6,'Ser'],['M13','Скопление в Геркулесе','шаровое скопление',16.695,36.46,5.8,'Her'],['M92','M92','шаровое скопление',17.285,43.14,6.4,'Her'],['M57','Туманность Кольцо','планетарная туманность',18.893,33.03,8.8,'Lyr'],['M27','Туманность Гантель','планетарная туманность',19.993,22.72,7.5,'Vul'],['M11','Скопление Дикая Утка','рассеянное скопление',18.851,-6.27,5.8,'Sct'],['M16','Туманность Орёл','туманность',18.313,-13.81,6.0,'Ser'],['M17','Туманность Омега','туманность',18.346,-16.18,6.0,'Sgr'],['M20','Туманность Трёхраздельная','туманность',18.044,-23.03,6.3,'Sgr'],['M8','Туманность Лагуна','туманность',18.060,-24.38,6.0,'Sgr'],['M22','M22','шаровое скопление',18.607,-23.90,5.1,'Sgr'],['M4','M4','шаровое скопление',16.393,-26.53,5.6,'Sco'],['M6','Скопление Бабочка','рассеянное скопление',17.669,-32.25,4.2,'Sco'],['M7','Скопление Птолемея','рассеянное скопление',17.898,-34.79,3.3,'Sco'],['M15','M15','шаровое скопление',21.500,12.17,6.2,'Peg'],['M2','M2','шаровое скопление',21.558,-0.82,6.5,'Aqr']];
+const MET=[['Квадрантиды',1,4,15.33,49.5,110],['Лириды',4,22,18.07,33.6,18],['Эта-Аквариды',5,6,22.5,-1,50],['Персеиды',8,13,3.2,58,100],['Дракониды',10,8,17.47,54,10],['Ориониды',10,21,6.33,15.6,20],['Леониды',11,17,10.27,21.6,15],['Геминиды',12,14,7.47,32.2,150],['Урсиды',12,22,14.47,75.3,10]];
+const PL=[['Меркурий','#b9b2a8',-0.42,[0.38709927,0.20563593,7.00497902,252.2503235,77.45779628,48.33076593,0.00000037,0.00001906,-0.00594749,149472.67411175,0.16047689,-0.12534081]],['Венера','#fff0c8',-4.40,[0.72333566,0.00677672,3.39467605,181.9790995,131.60246718,76.67984255,0.0000039,-0.00004107,-0.0007889,58517.81538729,0.00268329,-0.27769418]],['Марс','#e0663c',-1.52,[1.52371034,0.0933941,1.84969142,-4.55343205,-23.94362959,49.55953891,0.00001847,0.00007882,-0.00813131,19140.30268499,0.44441088,-0.29257343]],['Юпитер','#e8cfa4',-9.40,[5.202887,0.04838624,1.30439695,34.39644051,14.72847983,100.47390909,-0.00011607,-0.00013253,-0.00183714,3034.74612775,0.21252668,0.20469106]],['Сатурн','#ecd38c',-8.88,[9.53667594,0.05386179,2.48599187,49.95424423,92.59887831,113.66242448,-0.0012506,-0.00050991,0.00193609,1222.49362201,-0.41897216,-0.28867794]],['Уран','#9fe3e6',-7.19,[19.18916464,0.04725744,0.77263783,313.23810451,170.9542763,74.01692503,-0.00196176,-0.00004397,-0.00242939,428.48202785,0.40805281,0.04240589]],['Нептун','#6b8cf5',-6.87,[30.06992276,0.00859048,1.77004347,-55.12002969,44.96476227,131.78422574,0.00026291,0.00005105,0.00035372,218.45945325,-0.32241464,-0.00508664]]];
+const EARTH=[1.00000261,0.01671123,-0.00001531,100.46457166,102.93768193,0,0.00000562,-0.00004392,-0.01294668,35999.37244981,0.32327364,0];
+const CITIES=[['Актау',43.65,51.17,5],['Атырау',47.11,51.92,5],['Алматы',43.24,76.89,5],['Астана',51.17,71.43,5],['Шымкент',42.32,69.59,5],['Караганда',49.81,73.10,5],['Москва',55.76,37.62,3],['Свои координаты',null,null,null]];
+const COL={r:'#ffc0a0',o:'#ffdcb4',y:'#fff4d8',b:'#d6e4ff'};
+const EPS=23.43928*D;
+const vec=(raH,dec)=>{const a=raH*15*D,d=dec*D;return[Math.cos(d)*Math.cos(a),Math.cos(d)*Math.sin(a),Math.sin(d)]};
+const stars=S.map(s=>({kind:'star',key:s[0],name:s[4],mag:s[3],con:s[5],col:COL[s[6]]||'#ffffff',v:vec(s[1],s[2]),greek:/^[Ͱ-Ͽ\d]/.test(s[4])}));
+const byKey={};stars.forEach(s=>byKey[s.key]=s);
+const lines=[];const CL={};Object.entries(L).forEach(([c,t])=>t.split(',').forEach(p=>{const [a,b]=p.split(' ').map(k=>byKey[k]);if(a&&b){lines.push([a,b]);(CL[c]=CL[c]||[]).push([a,b])}}));
+const dsos=DSO.map(d=>({kind:'dso',code:d[0],name:d[1]===d[0]?d[0]:d[1],type:d[2],mag:d[5],con:d[6],v:vec(d[3],d[4])}));
+const mets=MET.map(m=>({kind:'meteor',name:m[0],m:m[1],d:m[2],zhr:m[5],v:vec(m[3],m[4])}));
+const cons=Object.keys(CON).map(c=>{const m=stars.filter(s=>s.con===c);if(m.length<2)return null;const v=[0,0,0];m.forEach(s=>{v[0]+=s.v[0];v[1]+=s.v[1];v[2]+=s.v[2]});const n=Math.hypot(...v);return{kind:'con',name:CON[c],con:c,v:v.map(x=>x/n)}}).filter(Boolean);
+const ecl=[];for(let l=0;l<=360;l+=5)ecl.push([Math.cos(l*D),Math.sin(l*D)*Math.cos(EPS),Math.sin(l*D)*Math.sin(EPS)]);
+const RAG=[],DECG=[];for(let h=0;h<24;h++){const p=[];for(let d=-85;d<=85;d+=5)p.push(vec(h,d));RAG.push(p)}for(let d=-80;d<=80;d+=10){const p=[];for(let h=0;h<=24;h+=.25)p.push(vec(h,d));DECG.push([d,p])}
+const GC=vec(17.761,-28.936),NGP=vec(12.857,27.128),GY=[NGP[1]*GC[2]-NGP[2]*GC[1],NGP[2]*GC[0]-NGP[0]*GC[2],NGP[0]*GC[1]-NGP[1]*GC[0]];
+const MW=[];for(let l=0;l<360;l+=4){const cl=Math.cos(l*D),sl=Math.sin(l*D),core=Math.cos(l*D/2)**2;for(const [b,w,a] of [[0,.17,.045],[((l*7)%11-5)*.8,.07,.055]]){const cb=Math.cos(b*D),sb=Math.sin(b*D);MW.push({v:[0,1,2].map(i=>cb*(cl*GC[i]+sl*GY[i])+sb*NGP[i]),w:w*(1+core*.7),a:a*(.4+core*1.2),c:core>.55?'255,226,196':'186,198,255'})}}
+
+// state
+const store={get(k,d){try{const v=localStorage.getItem('skymap3.'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem('skymap3.'+k,JSON.stringify(v))}catch(e){}}};
+const ICON={stars:'<path d="M12 3.5l2.5 5.3 5.8.7-4.3 4 1.1 5.7L12 16.4 6.9 19.2 8 13.5 3.7 9.5l5.8-.7z"/>',con:'<path d="M5 18l4-8 6 3 4-8"/><circle cx="5" cy="18" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="15" cy="13" r="1.6"/><circle cx="19" cy="5" r="1.6"/>',dso:'<ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="2"/>',pl:'<circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-20 12 12)"/>',met:'<path d="M4 4l11 11"/><path d="M9 4l8 8"/><circle cx="17.5" cy="17.5" r="2.5"/>',grid:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7.5h14M5 16.5h14"/>',hor:'<path d="M3 16h18"/><path d="M6 16a6 6 0 0 1 12 0"/><path d="M12 5v2M5.6 8.6l1.4 1.4M18.4 8.6L17 10"/>',sky:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>'};
+const LAY=[['stars','Звёзды'],['con','Созвездия'],['dso','Объекты Мессье'],['pl','Планеты'],['met','Метеорные потоки'],['grid','Сетка'],['hor','Горизонт'],['sky','Градиент неба']];
+const st={az:180*D,alt:32*D,fov:Math.min(innerWidth,innerHeight)<600?85:75,off:0,rate:1,sel:null,target:null,anim:null,
+  place:store.get('place',{name:'Актау',lat:43.65,lon:51.17,tz:5}),
+  sensor:store.get('sensor',1),set:Object.assign({info:1,infoAuto:1,lsize:1,dim:1,smooth:1,steady:2,ease:1,mag:1,decl:6,view:0},store.get('set',{})),lay:Object.assign({stars:1,con:1,dso:1,pl:1,met:1,grid:0,hor:1,sky:1,red:0},store.get('lay',{}))};
+const cv=$('#sky'),ctx=cv.getContext('2d');let W=1,H=1,dirty=true;
+const resize=()=>{const r=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*r;cv.height=H*r;ctx.setTransform(r,0,0,r,0,0);dirty=true};
+const roSky=new ResizeObserver(resize);roSky.observe(cv);
+
+// astronomy
+const kep=(el,T)=>{const a=el[0]+el[6]*T,e=el[1]+el[7]*T,I=(el[2]+el[8]*T)*D,Lm=el[3]+el[9]*T,pe=el[4]+el[10]*T,nd=(el[5]+el[11]*T)*D;const w=pe*D-nd;let M=((Lm-pe)%360+540)%360-180;M*=D;let E=M+e*Math.sin(M);for(let i=0;i<8;i++)E-=(E-e*Math.sin(E)-M)/(1-e*Math.cos(E));const x=a*(Math.cos(E)-e),y=a*Math.sqrt(1-e*e)*Math.sin(E);const cw=Math.cos(w),sw=Math.sin(w),cn=Math.cos(nd),sn=Math.sin(nd),ci=Math.cos(I),si=Math.sin(I);return[(cw*cn-sw*sn*ci)*x+(-sw*cn-cw*sn*ci)*y,(cw*sn+sw*cn*ci)*x+(-sw*sn+cw*cn*ci)*y,sw*si*x+cw*si*y]};
+const toEq=g=>{const v=[g[0],g[1]*Math.cos(EPS)-g[2]*Math.sin(EPS),g[1]*Math.sin(EPS)+g[2]*Math.cos(EPS)],n=Math.hypot(...v);return v.map(x=>x/n)};
+let bodies=[];
+function computeBodies(d){
+  const T=d/36525,E=kep(EARTH,T),b=[];
+  PL.forEach(([name,col,Hm,el])=>{const h=kep(el,T),g=[h[0]-E[0],h[1]-E[1],h[2]-E[2]],dist=Math.hypot(...g),r=Math.hypot(...h);b.push({kind:'planet',name,col,dist,mag:Hm+5*Math.log10(r*dist),v:toEq(g)})});
+  const sun={kind:'sun',name:'Солнце',mag:-26.7,dist:Math.hypot(...E),v:toEq(E.map(x=>-x))};
+  const s=x=>Math.sin(x*D),Lm=218.316+13.176396*d,M=134.963+13.064993*d,F=93.272+13.22935*d,Dm=297.85+12.190749*d,Ms=357.529+0.98560028*d;
+  const lon=(Lm+6.289*s(M)+1.274*s(2*Dm-M)+0.658*s(2*Dm)-0.186*s(Ms)-0.059*s(2*M-2*Dm)-0.057*s(M-2*Dm+Ms)+0.053*s(M+2*Dm)+0.046*s(2*Dm-Ms)+0.041*s(M-Ms)-0.035*s(Dm)-0.031*s(M+Ms))*D,lat=(5.128*s(F)+0.28*s(M+F)+0.277*s(M-F)+0.173*s(2*Dm-F))*D;
+  const mv=toEq([Math.cos(lat)*Math.cos(lon),Math.cos(lat)*Math.sin(lon),Math.sin(lat)]);
+  const frac=(1-(mv[0]*sun.v[0]+mv[1]*sun.v[1]+mv[2]*sun.v[2]))/2;
+  b.push({kind:'moon',name:'Луна',mag:-12.7+(1-frac)*8,frac,v:mv});b.push(sun);bodies=b;
+  for(const k of ['sel','target'])if(st[k]&&['planet','moon','sun'].includes(st[k].kind))st[k]=b.find(o=>o.name===st[k].name)||null;
+}
+const nowMs=()=>Date.now()+st.off;
+let cL,sL,sP,cP,R,U,F,SC,cx,cy,sunAlt=0,LST=0,curMs=0;
+function setup(ms){
+  const d=ms/864e5+2440587.5-2451545;curMs=ms;computeBodies(d);
+  LST=(280.46061837+360.98564736629*d+st.place.lon)*D;cL=Math.cos(LST);sL=Math.sin(LST);sP=Math.sin(st.place.lat*D);cP=Math.cos(st.place.lat*D);
+  const ca=Math.cos(st.alt),sa=Math.sin(st.alt),cz=Math.cos(st.az),sz=Math.sin(st.az);
+  if(sensorOn()){F=ori.F;R=ori.R;U=ori.U;st.alt=Math.asin(Math.max(-1,Math.min(1,F[2])));st.az=Math.atan2(F[0],F[1])}
+  else{F=[ca*sz,ca*cz,sa];R=[cz,-sz,0];U=[-sz*sa,-cz*sa,ca]}
+  SC=(Math.min(W,H)/2)/(2*Math.tan(st.fov*D/4));cx=W/2;cy=H/2;
+}
+const enu=v=>{const xH=v[0]*cL+v[1]*sL,yH=v[0]*sL-v[1]*cL;return[-yH,-(xH*sP-v[2]*cP),xH*cP+v[2]*sP]};
+const pE=(e,lim=-0.55)=>{const dx=e[0]*R[0]+e[1]*R[1],dy=e[0]*U[0]+e[1]*U[1]+e[2]*U[2],dz=e[0]*F[0]+e[1]*F[1]+e[2]*F[2];if(dz<lim)return null;const k=2/(1+dz);return{x:cx+SC*k*dx,y:cy-SC*k*dy,k,dx,dy,dz,up:e[2]}};
+const P=v=>pE(enu(v));
+const altaz=v=>{const e=enu(v);return{alt:Math.asin(Math.max(-1,Math.min(1,e[2])))/D,az:((Math.atan2(e[0],e[1])/D)+360)%360}};
+const radec=v=>({ra:((Math.atan2(v[1],v[0])/D+360)%360)/15,dec:Math.asin(v[2])/D});
+const inView=p=>p&&p.x>-30&&p.x<W+30&&p.y>-30&&p.y<H+30;
+
+// drawing
+const mix=(a,b,t)=>a.map((x,i)=>Math.round(x+(b[i]-x)*t));
+let picks=[];
+function polyline(vs){ctx.beginPath();let pen=false,last=null;for(const v of vs){const p=P(v);if(!p||(last&&Math.hypot(p.x-last.x,p.y-last.y)>W)){pen=false;last=p;continue}pen?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);pen=true;last=p}ctx.stroke()}
+const label=(txt,x,y,col,font='13px Roboto,sans-serif',al='left')=>{ctx.font=font;ctx.textAlign=al;ctx.fillStyle=col;ctx.shadowColor='rgba(0,0,12,.85)';ctx.shadowBlur=5;ctx.fillText(txt,x,y);ctx.shadowBlur=0;ctx.shadowColor='transparent'};
+function metActive(m,ms){const y=new Date(ms).getUTCFullYear();let best=1e9;for(const yy of [y-1,y,y+1]){const dd=(ms-Date.UTC(yy,m.m-1,m.d))/864e5;if(Math.abs(dd)<Math.abs(best))best=dd}return best>=-10&&best<=6}
+function draw(){
+  const ms=nowMs();setup(ms);picks=[];
+  const sun=bodies.find(b=>b.kind==='sun');sunAlt=altaz(sun.v).alt;
+  const t=st.lay.sky?Math.max(0,Math.min(1,(sunAlt+12)/16)):0,lim=st.lay.sky?6.5-1.5*t:9;
+  const inner=mix([2,3,16],[14,44,110],t),outer=mix([22,30,102],[70,120,190],t);
+  const z=pE([0,0,1],-.98),A=pE([Math.sin(st.az),Math.cos(st.az),0],-2);
+  if(z&&A){const rr=Math.max(40,Math.hypot(z.x-A.x,z.y-A.y));const g=ctx.createRadialGradient(z.x,z.y,0,z.x,z.y,rr);g.addColorStop(0,`rgb(${inner})`);g.addColorStop(1,`rgb(${outer})`);ctx.fillStyle=g}else ctx.fillStyle=`rgb(${outer})`;
+  ctx.fillRect(0,0,W,H);
+  if(st.lay.sky&&sunAlt>-18&&sunAlt<8){const sp=pE(enu(sun.v),-2);if(sp&&sp.dz>-.85){const tw=Math.max(0,1-Math.abs(sunAlt+4)/14),rr=Math.max(W,H)*.95,g2=ctx.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,rr);g2.addColorStop(0,`rgba(255,155,70,${.5*tw})`);g2.addColorStop(.4,`rgba(235,95,120,${.2*tw})`);g2.addColorStop(1,'rgba(235,95,120,0)');ctx.fillStyle=g2;ctx.fillRect(0,0,W,H)}}
+  if(st.lay.sky&&t<.6){const mwA=1-t/.6;ctx.globalCompositeOperation='lighter';for(const m of MW){const p=P(m.v);if(!p)continue;const r=SC*p.k*m.w;if(p.x<-r||p.x>W+r||p.y<-r||p.y>H+r)continue;const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);g.addColorStop(0,`rgba(${m.c},${m.a*mwA})`);g.addColorStop(1,`rgba(${m.c},0)`);ctx.fillStyle=g;ctx.fillRect(p.x-r,p.y-r,2*r,2*r)}ctx.globalCompositeOperation='source-over'}
+  const zf=Math.max(.85,Math.min(2.4,Math.sqrt(90/st.fov)));
+  ctx.lineCap='round';ctx.lineJoin='round';
+  if(st.lay.grid){ctx.lineWidth=1;ctx.strokeStyle='rgba(90,190,150,.28)';RAG.forEach(p=>polyline(p));DECG.forEach(([d,p])=>{ctx.lineWidth=d===0?1.6:1;polyline(p)});
+    for(let hh=0;hh<24;hh+=2){const p=P(vec(hh,0));if(inView(p))label(hh+'ч',p.x+4,p.y-4,'rgba(120,215,170,.85)',fnt(12))}
+    const cra=Math.round(radec(eqAt(st.az,st.alt)).ra);for(let d=-80;d<=80;d+=20){if(!d)continue;const p=P(vec(cra,d));if(inView(p))label((d>0?'+':'−')+Math.abs(d)+'°',p.x+4,p.y-4,'rgba(120,215,170,.85)',fnt(12))}}
+  // ecliptic
+  ctx.strokeStyle='rgba(255,170,70,.75)';ctx.lineWidth=1.4;ctx.setLineDash([7,6]);polyline(ecl);ctx.setLineDash([]);ctx.strokeStyle='rgba(255,170,70,.6)';
+  for(let l=0;l<360;l+=10){const a=P(eclV(l)),b=P(eclV(l+.5));if(!inView(a)||!b)continue;const dx=b.x-a.x,dy=b.y-a.y,n=Math.hypot(dx,dy)||1,len=l%30?5:9;ctx.beginPath();ctx.moveTo(a.x-dy/n*len,a.y+dx/n*len);ctx.lineTo(a.x+dy/n*len,a.y-dx/n*len);ctx.stroke();if(l%30===0)label(l+'°',a.x+6,a.y-8,'#f0922c',fnt(13))}
+  if(st.lay.con){const half=Math.min(W,H)/2,ca={};
+    for(const c of cons){const p=P(c.v);ca[c.con]=p&&p.dz>0?Math.max(0,Math.min(1,(.8-Math.hypot(p.x-cx,p.y-cy)/half)/.4)):0}
+    const lc=t>.5?'255,255,255':'160,138,250';
+    for(const c in CL){const k=ca[c];if(!k)continue;ctx.beginPath();
+      for(const [a,b] of CL[c]){const p=P(a.v),q=P(b.v);if(p&&q&&Math.hypot(p.x-q.x,p.y-q.y)<W){ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y)}}
+      ctx.lineWidth=6;ctx.strokeStyle=`rgba(${lc},${.14*k})`;ctx.stroke();ctx.lineWidth=1.3;ctx.strokeStyle=`rgba(${lc},${.85*k})`;ctx.stroke()}
+    for(const c of cons){const p=P(c.v);if(inView(p)){const k=ca[c.con]||0;label(c.name,p.x,p.y,`rgba(206,182,255,${.35+.6*k})`,fnt(15,500),'center');picks.push({o:c,x:p.x,y:p.y,w:.6})}}}
+  if(st.lay.dso){for(const o of dsos){const p=P(o.v);if(!inView(p))continue;dsoIcon(o,p.x,p.y,zf);if(st.fov<100||o.mag<5)label(o.code,p.x+9,p.y+4,'rgba(130,215,255,.85)',fnt(12));picks.push({o,x:p.x,y:p.y,w:1})}}
+  if(st.lay.stars){for(const s of stars){if(s.mag>lim+1)continue;const p=P(s.v);if(!inView(p))continue;
+    const a=Math.max(.6,Math.min(1,(lim+1.6-s.mag)/1.3)),r=Math.max(1.3,Math.min(6.8,(6.2-s.mag)*.78))*zf;
+    ctx.globalAlpha=a;if(s.mag<3.3){const gr=r*(s.mag<.6?5.2:s.mag<2?3.8:2.8),g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,gr);g.addColorStop(0,hexA(s.col,.85));g.addColorStop(.25,hexA(s.col,.3));g.addColorStop(1,hexA(s.col,0));ctx.fillStyle=g;ctx.fillRect(p.x-gr,p.y-gr,2*gr,2*gr);
+      if(s.mag<1.7){const sl=gr*1.35;ctx.strokeStyle=hexA(s.col,.65);ctx.lineWidth=s.mag<.6?1.3:.9;ctx.beginPath();ctx.moveTo(p.x-sl,p.y);ctx.lineTo(p.x+sl,p.y);ctx.moveTo(p.x,p.y-sl);ctx.lineTo(p.x,p.y+sl);ctx.stroke()}}
+    ctx.fillStyle=s.col;ctx.beginPath();ctx.arc(p.x,p.y,r,0,7);ctx.fill();if(r>1.4){ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(p.x,p.y,r*.55,0,7);ctx.fill()}ctx.globalAlpha=1;
+    if((!s.greek&&(s.mag<3.7||st.fov<60))||st.fov<30)label(s.name,p.x+r+4,p.y+5,t>.5?'#ffffff':'rgba(232,234,246,.92)',fnt(15));
+    picks.push({o:s,x:p.x,y:p.y,w:1})}}
+  if(st.lay.met){for(const m of mets){if(!metActive(m,ms))continue;const p=P(m.v);if(!inView(p))continue;meteorIcon(p.x,p.y);label(m.name,p.x+14,p.y+4,'#ffffff',fnt(14,500));picks.push({o:m,x:p.x,y:p.y,w:1.3})}}
+  if(st.lay.pl){for(const b of bodies){const p=P(b.v);if(!inView(p))continue;
+    if(b.kind==='planet'){const r=planetIcon(b,p.x,p.y,zf);label(b.name,p.x+r+5,p.y+5,'#ff8a3d',fnt(15,500))}
+    else if(b.kind==='moon')drawMoon(b,p,sun);else drawSun(p);
+    picks.push({o:b,x:p.x,y:p.y,w:1.8})}}
+  if(st.lay.hor)drawHorizon(t);
+  {const vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*.38,cx,cy,Math.hypot(W,H)*.62);vg.addColorStop(0,'rgba(0,0,10,0)');vg.addColorStop(1,'rgba(0,0,10,.38)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H)}
+  drawSel();drawTarget();
+  if(st.lay.red){ctx.globalCompositeOperation='multiply';ctx.fillStyle='#ff2a12';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='source-over';const dm=[0,.25,.5][st.set.dim];if(dm){ctx.fillStyle=`rgba(0,0,0,${dm})`;ctx.fillRect(0,0,W,H)}}
+  hud(ms);dirty=false;
+}
+const eclV=l=>[Math.cos(l*D),Math.sin(l*D)*Math.cos(EPS),Math.sin(l*D)*Math.sin(EPS)];
+const fnt=(n,w=400)=>`${w} ${Math.round(n*[.85,1,1.2][st.set.lsize])}px Roboto,sans-serif`;
+function eqAt(az,al){const E=Math.cos(al)*Math.sin(az),N=Math.cos(al)*Math.cos(az),Up=Math.sin(al);const xH=-N*sP+Up*cP,yH=-E,z=N*cP+Up*sP;return[xH*cL+yH*sL,xH*sL-yH*cL,z]}
+function dsoIcon(o,x,y,zf){const r=4.5*Math.min(zf,1.6);ctx.strokeStyle='rgba(120,220,255,.85)';ctx.fillStyle='rgba(120,220,255,.18)';ctx.lineWidth=1.2;ctx.beginPath();
+  if(o.type==='галактика')ctx.ellipse(x,y,r*1.6,r*.7,-.5,0,7);else if(o.type.includes('шаровое')){ctx.arc(x,y,r,0,7);ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.moveTo(x,y-r);ctx.lineTo(x,y+r)}
+  else if(o.type.includes('рассеянное')){ctx.setLineDash([2,2]);ctx.arc(x,y,r*1.2,0,7)}else if(o.type.includes('планетарная')){ctx.arc(x,y,r*.8,0,7);ctx.moveTo(x+r*1.6,y);ctx.arc(x,y,r*1.6,0,7)}else ctx.rect(x-r,y-r,r*2,r*2);
+  ctx.fill();ctx.stroke();ctx.setLineDash([])}
+function meteorIcon(x,y){ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1.3;ctx.beginPath();for(let i=0;i<6;i++){const a=i*Math.PI/3+.3;ctx.moveTo(x+Math.cos(a)*4,y+Math.sin(a)*4);ctx.lineTo(x+Math.cos(a)*11,y+Math.sin(a)*11)}ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,2,0,7);ctx.fill()}
+function planetIcon(b,x,y,zf){const base={Меркурий:4.5,Венера:7,Марс:5.5,Юпитер:9,Сатурн:7.5,Уран:5.5,Нептун:5.5}[b.name];const r=base*Math.min(1.8,Math.max(1,zf*.9));
+  if(b.name==='Сатурн'){ctx.strokeStyle='#d9c17c';ctx.lineWidth=Math.max(1.5,r*.28);ctx.beginPath();ctx.ellipse(x,y,r*2.1,r*.7,-.35,Math.PI,2*Math.PI);ctx.stroke()}
+  const g=ctx.createRadialGradient(x-r*.4,y-r*.4,r*.1,x,y,r);g.addColorStop(0,'#ffffff');g.addColorStop(.25,b.col);g.addColorStop(1,shade(b.col));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+  if(b.name==='Юпитер'||b.name==='Марс'){ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();ctx.fillStyle=b.name==='Юпитер'?'rgba(150,95,55,.55)':'rgba(110,40,20,.45)';
+    if(b.name==='Юпитер'){[-.45,-.1,.3].forEach(k=>ctx.fillRect(x-r,y+k*r,2*r,r*.18))}else{ctx.beginPath();ctx.ellipse(x+r*.2,y+r*.15,r*.45,r*.25,.4,0,7);ctx.fill()}ctx.restore()}
+  if(b.name==='Сатурн'){ctx.beginPath();ctx.ellipse(x,y,r*2.1,r*.7,-.35,0,Math.PI);ctx.stroke()}
+  return b.name==='Сатурн'?r*2:r}
+const hexA=(h,a)=>{const n=parseInt(h.slice(1),16);return`rgba(${n>>16},${n>>8&255},${n&255},${a})`};
+const shade=h=>{const n=parseInt(h.slice(1),16);return`rgb(${(n>>16)*.45|0},${(n>>8&255)*.45|0},${(n&255)*.45|0})`};
+function drawSun(p){const r=Math.max(11,SC*p.k*.0047);ctx.strokeStyle='#ffb347';ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<12;i++){const a=i*Math.PI/6;ctx.moveTo(p.x+Math.cos(a)*r*1.35,p.y+Math.sin(a)*r*1.35);ctx.lineTo(p.x+Math.cos(a)*r*1.9,p.y+Math.sin(a)*r*1.9)}ctx.stroke();
+  const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);g.addColorStop(0,'#fff1c4');g.addColorStop(1,'#ffa62b');ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,r,0,7);ctx.fill();label('Солнце',p.x+r*2+4,p.y+5,'#ff8a3d',fnt(15,500))}
+function drawMoon(b,p,sun){
+  const r=Math.max(10,SC*p.k*.0045);const w=b.v.map((x,i)=>x+(sun.v[i]-x)*.02),n=Math.hypot(...w);const q=P(w.map(x=>x/n));const ang=q?Math.atan2(q.y-p.y,q.x-p.x):0;
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(ang);ctx.fillStyle='#2b2f3a';ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+  const e=r*(1-2*b.frac);ctx.fillStyle='#f3f1e8';ctx.beginPath();ctx.arc(0,0,r,-Math.PI/2,Math.PI/2,false);ctx.ellipse(0,0,Math.abs(e),r,0,Math.PI/2,-Math.PI/2,e>0);ctx.fill();ctx.restore();
+  label('Луна',p.x+r+5,p.y+5,'#ff8a3d',fnt(15,500))}
+function drawHorizon(t){
+  const raw=a=>pE([Math.sin(a),Math.cos(a),0],-2);const A=raw(st.az),B=raw(st.az+Math.PI/2),C=raw(st.az-Math.PI/2);
+  const d=2*(A.x*(B.y-C.y)+B.x*(C.y-A.y)+C.x*(A.y-B.y));let line=Math.abs(d)<1e-6,ox,oy,rr;
+  if(!line){const a2=A.x*A.x+A.y*A.y,b2=B.x*B.x+B.y*B.y,c2=C.x*C.x+C.y*C.y;ox=(a2*(B.y-C.y)+b2*(C.y-A.y)+c2*(A.y-B.y))/d;oy=(a2*(C.x-B.x)+b2*(A.x-C.x)+c2*(B.x-A.x))/d;rr=Math.hypot(A.x-ox,A.y-oy);if(rr>60*Math.max(W,H))line=true}
+  const path=()=>{ctx.beginPath();if(line){ctx.moveTo(-10,A.y);ctx.lineTo(W+10,A.y)}else ctx.arc(ox,oy,rr,0,Math.PI*2)};
+  // ground haze below the horizon
+  ctx.fillStyle=t>.5?'rgba(34,52,48,.74)':'rgba(6,8,24,.8)';
+  if(line)ctx.fillRect(0,A.y,W,H-A.y+2);else{const nd=st.alt<89.9*D?pE([0,0,-1],-2):null,inside=nd&&Math.hypot(nd.x-ox,nd.y-oy)<rr;ctx.beginPath();if(!inside)ctx.rect(0,0,W,H);ctx.moveTo(ox+rr,oy);ctx.arc(ox,oy,rr,0,Math.PI*2);ctx.fill('evenodd')}
+  // glowing horizon line
+  [[22,'rgba(110,190,255,.05)'],[10,'rgba(110,190,255,.1)'],[4,'rgba(150,210,255,.25)'],[1.3,'rgba(215,236,255,.85)']].forEach(([w,c])=>{ctx.lineWidth=w;ctx.strokeStyle=c;path();ctx.stroke()});
+  [['СЕВЕР',0],['ВОСТОК',90],['ЮГ',180],['ЗАПАД',270]].forEach(([n,az])=>{const p=pE([Math.sin(az*D),Math.cos(az*D),0]);if(inView(p))label(n,p.x+6,p.y-8,'#a9d8ff',fnt(15,700))});
+  const zz=pE([0,0,1]);if(inView(zz))label('Зенит',zz.x,zz.y+4,'rgba(169,216,255,.8)',fnt(13),'center');const nd2=pE([0,0,-1]);if(inView(nd2))label('Надир',nd2.x,nd2.y+4,'rgba(169,216,255,.8)',fnt(13),'center');
+}
+function drawSel(){const o=st.sel;if(!o||o===st.target)return;const p=P(o.v);if(!inView(p))return;ctx.lineWidth=6;ctx.strokeStyle='rgba(127,178,255,.2)';ctx.beginPath();ctx.arc(p.x,p.y,17,0,7);ctx.stroke();ctx.lineWidth=2;ctx.strokeStyle='#9cc4ff';ctx.stroke()}
+function drawTarget(){
+  const o=st.target;if(!o)return;const e=enu(o.v),dx=e[0]*R[0]+e[1]*R[1],dy=e[0]*U[0]+e[1]*U[1]+e[2]*U[2],dz=e[0]*F[0]+e[1]*F[1]+e[2]*F[2];
+  const ang=Math.acos(Math.max(-1,Math.min(1,dz)))/D,ring=Math.max(42,Math.min(70,Math.min(W,H)*.12));
+  const p=pE(e,-2),inside=p&&dz>0&&Math.hypot(p.x-cx,p.y-cy)<ring;
+  const k=inside?1:Math.max(0,1-ang/120),col=`rgb(${mix([255,70,70],[90,230,120],k)})`;
+  ctx.strokeStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,ring,0,7);ctx.stroke();
+  if(!inside){const a=Math.atan2(-dy,dx),c=Math.cos(a),s=Math.sin(a);ctx.save();ctx.translate(cx+c*ring,cy+s*ring);ctx.rotate(a);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-4,-12);ctx.lineTo(-4,12);ctx.closePath();ctx.fill();ctx.restore()}
+  else{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,14,0,7);ctx.stroke()}
+  ctx.font=fnt(14,500);const txt=o.name+(inside?' — найдено':' · '+Math.round(ang)+'°'),tw=ctx.measureText(txt).width;
+  ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(cx-tw/2-8,cy+ring+10,tw+16,24);label(txt,cx,cy+ring+27,col,fnt(14,500),'center');
+}
+// HUD
+const MON=['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+const local=ms=>new Date(ms+st.place.tz*36e5);
+const pad=n=>String(n).padStart(2,'0');
+const hm=ms=>{const d=local(ms);return pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())};
+const dateStr=ms=>{const d=local(ms);return`${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`};
+const DIR=['С','ССВ','СВ','ВСВ','В','ВЮВ','ЮВ','ЮЮВ','Ю','ЮЮЗ','ЮЗ','ЗЮЗ','З','ЗСЗ','СЗ','ССЗ'];
+const RATES=[-86400,-3600,-600,-60,0,1,60,600,3600,86400],RLAB=['−1 сут/с','−1 ч/с','−10 мин/с','−1 мин/с','пауза','реальное время','1 мин/с','10 мин/с','1 ч/с','1 сут/с'];
+let lastCard=0;
+function hud(ms){
+  const az=((st.az/D)%360+360)%360,rd=radec(eqAt(st.az,st.alt)),rm=Math.round(rd.ra*60)%1440;
+  $('#infodl').innerHTML=[['Восх.',`${Math.floor(rm/60)}ч ${pad(rm%60)}м`],['Скл.',(rd.dec<0?'−':'+')+Math.abs(rd.dec).toFixed(1)+'°'],['Выс.',(st.alt<0?'−':'+')+Math.abs(st.alt/D).toFixed(1)+'°'],['Аз.',`${Math.round(az)}° ${DIR[Math.round(az/22.5)%16]}`],['Поле',Math.round(st.fov)+'°']].map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  const travel=Math.abs(st.off)>6e4||st.rate!==1;$('#timebar').hidden=!travel;
+  if(travel){$('#tbtext').innerHTML=`${dateStr(ms)}, ${hm(ms)}<small>${RLAB[RATES.indexOf(st.rate)]}</small>`;$('#ppicon').innerHTML=st.rate===0?'<path d="M8 6v12l10-6z"/>':'<path d="M8 6v12M16 6v12"/>'}
+  if(!$('#card').hidden&&st.sel&&(Date.now()-lastCard>4e3||st.rate!==1&&Date.now()-lastCard>500))fillCard(st.sel);
+}
+// info card
+const fmtRA=h=>{const m=Math.round(h*60)%1440;return`${Math.floor(m/60)} ч ${pad(m%60)} мин`};
+const fmtDec=d=>{const s=d<0?'−':'+',m=Math.round(Math.abs(d)*60);return`${s}${Math.floor(m/60)}° ${pad(m%60)}′`};
+function riseSet(o,ms){const {ra,dec}=radec(o.v);const h0=(o.kind==='sun'?-.833:o.kind==='moon'?.125:-.567)*D,dd=dec*D,la=st.place.lat*D;
+  const c=(Math.sin(h0)-Math.sin(la)*Math.sin(dd))/(Math.cos(la)*Math.cos(dd)),per=23.9345;
+  const tt=(((ra*15-LST/D)%360+360)%360)/15/1.0027379,out={tr:ms+tt*36e5};
+  if(c<-1)out.circ=true;else if(c>1)out.never=true;else{const H0=Math.acos(c)/D/15/1.0027379;let r=tt-H0;if(r<0)r+=per;let s=tt+H0;if(s>=per)s-=per;out.rise=ms+r*36e5;out.set=ms+s*36e5}return out}
+const KIND={star:'Звезда',planet:'Планета',moon:'Спутник Земли',sun:'Звезда',con:'Созвездие',meteor:'Метеорный поток'};
+function fillCard(o){
+  lastCard=Date.now();const ms=nowMs();setup(ms);const aa=altaz(o.v),rd=radec(o.v),rs=riseSet(o,ms);
+  let kind=o.kind==='dso'?(o.code!==o.name?o.code+' · ':'')+o.type:KIND[o.kind];if(o.con&&o.kind!=='con')kind+=' · '+CON[o.con];
+  const rows=[];
+  if(o.kind==='meteor')rows.push(['Пик',`${o.d} ${MON[o.m-1]}`],['Метеоров в час','до '+o.zhr]);
+  else if(o.kind!=='con'&&o.mag!=null)rows.push(['Звёздная величина',(o.mag<0?'−':'')+Math.abs(o.mag).toFixed(1)]);
+  if(o.kind==='moon')rows.push(['Освещённость',Math.round(o.frac*100)+' %']);
+  if(o.dist)rows.push(['Расстояние',o.dist.toFixed(o.dist<2?3:2)+' а.е.']);
+  rows.push(['Высота',(aa.alt<0?'−':'+')+Math.abs(aa.alt).toFixed(1)+'°'],['Азимут',aa.az.toFixed(1)+'° ('+DIR[Math.round(aa.az/22.5)%16]+')'],['Прямое восхождение',fmtRA(rd.ra)],['Склонение',fmtDec(rd.dec)]);
+  if(rs.circ)rows.push(['Восход / заход','не заходит']);else if(rs.never)rows.push(['Восход / заход','не восходит здесь']);else rows.push(['Восход',(o.kind==='moon'?'≈ ':'')+hm(rs.rise)],['Заход',(o.kind==='moon'?'≈ ':'')+hm(rs.set)]);
+  if(!rs.never)rows.push(['Кульминация',hm(rs.tr)]);
+  const c=$('#card');c.innerHTML=`<div class="head"><h2></h2><button class="ib" id="cx" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><p class="kind"></p><dl>${rows.map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>${aa.alt<0?'<p class="warn">Сейчас под горизонтом.</p>':''}<div class="row"><button class="btn pri" id="go">Найти на небе</button></div>`;
+  c.querySelector('h2').textContent=o.name;c.querySelector('.kind').textContent=kind;
+  $('#cx').onclick=()=>{st.sel=null;c.hidden=true;dirty=true};$('#go').onclick=()=>{find(o);c.hidden=true};
+}
+function select(o){st.sel=o;closeSheets();$('#card').hidden=false;fillCard(o);dirty=true}
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function find(o){st.target=o;st.sel=null;closeSheets();$('#card').hidden=true;flyTo(o);toast('Ищем: '+o.name)}
+function flyTo(o){if(sensorOn())return;setup(nowMs());const a=altaz(o.v);const daz=((a.az*D-st.az)%(2*Math.PI)+3*Math.PI)%(2*Math.PI)-Math.PI;const tal=Math.max(-30,Math.min(90,a.alt))*D;
+  if(reduce){st.az+=daz;st.alt=tal;dirty=true;return}st.anim={t0:performance.now(),az0:st.az,daz,al0:st.alt,dal:tal-st.alt}}
+
+// device orientation (compass + gyro)
+let ori=null,gotAbs=false,sensorFail=false,sensorTimer=0;
+const sensorOn=()=>st.sensor&&ori&&!sensorFail;
+const nrm=v=>{const n=Math.hypot(...v)||1;return v.map(x=>x/n)},crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+function onOri(e){
+  let a=e.alpha;const b=e.beta,g=e.gamma;if(a==null||b==null)return;const S2=st.set;
+  if(e.webkitCompassHeading!=null)a=360-e.webkitCompassHeading;else if(e.type==='deviceorientationabsolute'||e.absolute)gotAbs=true;else if(gotAbs)return;
+  if(S2.mag)a-=S2.decl;
+  const cA=Math.cos(a*D),sA=Math.sin(a*D),cB=Math.cos(b*D),sB=Math.sin(b*D),cG=Math.cos(g*D),sG=Math.sin(g*D);
+  const ex=[cA*cG-sA*sB*sG,sA*cG+cA*sB*sG,-cB*sG],ey=[-sA*cB,cA*cB,sB],ez=[cA*sG+sA*sB*cG,sA*sG-cA*sB*cG,cB*cG];
+  const th=(((screen.orientation&&screen.orientation.angle)||window.orientation||0)+(S2.view===1?90:0))*D,ct=Math.cos(th),stt=Math.sin(th);
+  let Fn=ez.map(x=>-x),Un=[0,1,2].map(i=>stt*ex[i]+ct*ey[i]);if(S2.view===2){Fn=ey.slice();Un=ez.slice()}
+  if(ori){let k=S2.smooth?[.5,.3,.14][S2.steady]:1;if(S2.smooth&&S2.ease){const dA=Math.acos(Math.max(-1,Math.min(1,ori.F[0]*Fn[0]+ori.F[1]*Fn[1]+ori.F[2]*Fn[2])))/D;k+=(1-k)*Math.min(1,dA/8)*[0,.6,1][S2.ease]}ori.F=nrm(ori.F.map((x,i)=>x+(Fn[i]-x)*k));ori.Uraw=nrm(ori.Uraw.map((x,i)=>x+(Un[i]-x)*k))}else ori={F:Fn,Uraw:Un};
+  ori.R=nrm(crs(ori.F,ori.Uraw));ori.U=crs(ori.R,ori.F);
+  if(!sensorFail&&st.sensor){clearTimeout(sensorTimer);dirty=true}
+}
+function startSensors(){
+  addEventListener('deviceorientationabsolute',onOri);addEventListener('deviceorientation',onOri);
+  clearTimeout(sensorTimer);sensorTimer=setTimeout(()=>{if(!ori){sensorFail=true;toast('Датчики недоступны здесь — ручной режим');updSensorBtn()}},2500)}
+function enableSensors(){const DOE=window.DeviceOrientationEvent;
+  if(DOE&&typeof DOE.requestPermission==='function'){$('#perm').hidden=false}else startSensors()}
+$('#perm-ok').onclick=()=>{$('#perm').hidden=true;window.DeviceOrientationEvent.requestPermission().then(r=>{if(r==='granted')startSensors();else{sensorFail=true;toast('Доступ к датчикам не дан — ручной режим');updSensorBtn()}}).catch(()=>{sensorFail=true;updSensorBtn()})};
+$('#perm-no').onclick=()=>{$('#perm').hidden=true;st.sensor=0;store.set('sensor',0);updSensorBtn()};
+function updSensorBtn(){const on=!!(st.sensor&&!sensorFail);$('#b-sensor').setAttribute('aria-label',on?'Режим датчиков (нажмите для ручного)':'Ручной режим (нажмите для датчиков)');$('#modeicon').innerHTML=on?'<circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>':'<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11M11 10V5a1.5 1.5 0 0 1 3 0v6M14 10.5V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a5 5 0 0 1-4-2L4 14.5a1.5 1.5 0 0 1 2.2-2L8 14"/>';dirty=true}
+$('#b-sensor').onclick=()=>{if(st.sensor&&!sensorFail){st.sensor=0;toast('Ручной режим: двигайте небо пальцем')}else{st.sensor=1;sensorFail=false;ori=null;toast('Режим датчиков: двигайте телефон');enableSensors()}store.set('sensor',st.sensor);updSensorBtn()};
+if(st.sensor)enableSensors();updSensorBtn();
+
+// chrome auto-hide + toast
+let hideT=0;const showUI=()=>{document.body.classList.remove('hideui')};
+let toastT=0;function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1600)}
+
+
+// interaction
+const pts=new Map();let moved=0,pinch=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;st.anim=null;if(pts.size===2){const [a,b]=[...pts.values()];pinch=Math.hypot(a.x-b.x,a.y-b.y)}});
+cv.addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p){if(e.pointerType==='mouse')showUI();return}const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch)zoom(pinch/d);pinch=d;moved+=99;return}
+  moved+=Math.abs(dx)+Math.abs(dy);if(sensorOn())return;st.az-=dx/(SC*Math.max(Math.cos(st.alt),.35));st.alt=Math.max(-89*D,Math.min(89.9*D,st.alt+dy/SC));dirty=true});
+cv.addEventListener('pointerup',e=>{const p=pts.get(e.pointerId);pts.delete(e.pointerId);if(pts.size<2)pinch=0;if(p&&moved<8&&pts.size===0)tap(e.clientX,e.clientY)});
+cv.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);pinch=0});
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.0012))},{passive:false});
+function zoom(f){st.fov=Math.max(8,Math.min(150,st.fov*f));dirty=true}
+
+function tap(x,y){
+  if(st.target){const ring=Math.max(42,Math.min(70,Math.min(W,H)*.12));if(Math.abs(Math.hypot(x-cx,y-cy)-ring)<22){toast('Поиск отменён');st.target=null;dirty=true;return}}
+  let best=null,bd=28;for(const p of picks){const d=Math.hypot(p.x-x,p.y-y)/p.w;if(d<bd){bd=d;best=p.o}}
+  if(best&&st.set.info&&(!sensorOn()||st.set.infoAuto)){select(best);return}
+  if(!$('#menu').hidden){closeMenu();return}
+  const open=document.querySelector('.sheet:not([hidden])')||!$('#card').hidden;closeSheets();$('#card').hidden=true;st.sel=null;dirty=true;
+  if(!open)document.body.classList.toggle('hideui')}
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.key!=='Escape')return;const k=e.key,s=st.fov*D/12;if(sensorOn()&&k.startsWith('Arrow'))return;if(k==='ArrowLeft')st.az-=s;else if(k==='ArrowRight')st.az+=s;else if(k==='ArrowUp')st.alt=Math.min(89.9*D,st.alt+s);else if(k==='ArrowDown')st.alt=Math.max(-89*D,st.alt-s);else if(k==='+'||k==='=')zoom(.8);else if(k==='-')zoom(1.25);else if(k==='Escape'){closeSheets();closeMenu();$('#card').hidden=true;$('#settings').hidden=true}else return;dirty=true});
+
+// layers strip
+$('#strip').innerHTML=LAY.filter(l=>l[0]!=='sky').map(([k,n])=>`<button class="ib" data-l="${k}" aria-label="${n}" title="${n}" aria-pressed="${!!st.lay[k]}"><svg viewBox="0 0 24 24">${ICON[k]}</svg></button>`).join('')+'<hr><button class="ib" id="m-layers2" aria-label="Все слои" title="Все слои"><svg viewBox="0 0 24 24"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>';
+function setLayer(k,on){st.lay[k]=on?1:0;store.set('lay',st.lay);const b=$(`#strip [data-l=${k}]`);if(b)b.setAttribute('aria-pressed',!!on);const c=$(`#laylist [data-l=${k}]`);if(c)c.setAttribute('aria-checked',!!on);dirty=true}
+$('#strip').addEventListener('click',e=>{if(e.target.closest('#m-layers2')){openLayers();return}const b=e.target.closest('[data-l]');if(!b)return;const k=b.dataset.l;setLayer(k,!st.lay[k]);toast(b.getAttribute('aria-label')+(st.lay[k]?': показаны':': скрыты'))});
+$('#laylist').innerHTML=LAY.map(([k,n])=>`<button class="set" data-l="${k}" role="switch" aria-checked="${!!st.lay[k]}" style="min-height:52px;padding:8px 4px"><div class="t"><b style="font-size:16px">${n}</b></div><div class="sw"></div></button>`).join('');
+$('#laylist').addEventListener('click',e=>{const b=e.target.closest('[data-l]');if(b)setLayer(b.dataset.l,!st.lay[b.dataset.l])});
+function openLayers(){closeMenu();openSheet('layers')}
+const setRed=()=>{document.body.classList.toggle('red',!!st.lay.red);$('#b-night').setAttribute('aria-pressed',!!st.lay.red)};setRed();
+$('#b-night').onclick=()=>{st.lay.red=st.lay.red?0:1;store.set('lay',st.lay);setRed();toast(st.lay.red?'Ночной режим включён':'Ночной режим выключен');dirty=true};
+
+// sheets
+function closeSheets(){document.querySelectorAll('.sheet').forEach(s=>s.hidden=true)}
+function openSheet(id){const sh=$('#sh-'+id),was=sh.hidden;closeSheets();closeMenu();$('#card').hidden=true;if(was){sh.hidden=false;showUI()}return was}
+$('#b-search').onclick=()=>{if(openSheet('search')){$('#q').value='';search();$('#q').focus()}};
+$('#b-time').onclick=()=>{if(openSheet('time')){events();syncDT()}};
+function closeMenu(){$('#menu').hidden=true;$('#b-menu').setAttribute('aria-expanded','false')}
+$('#b-menu').onclick=()=>{const m=$('#menu'),o=m.hidden;closeSheets();$('#card').hidden=true;m.hidden=!o;$('#b-menu').setAttribute('aria-expanded',o)};
+$('#b-place').onclick=()=>{closeMenu();openSheet('place')};$('#m-layers').onclick=openLayers;
+$('#m-set').onclick=()=>{closeMenu();renderSettings();$('#settings').hidden=false;$('#set-back').focus()};
+$('#set-back').onclick=()=>{$('#settings').hidden=true};
+const SETS=[['Управление'],
+ ['info','Информация по нажатию','Нажмите на объект, чтобы узнать о нём'],
+ ['infoAuto','Карточки в режиме датчиков','Показывать карточки и тогда, когда небо движется вместе с телефоном'],
+ ['Вид'],
+ ['lsize','Размер подписей','Размер текста на небе при любом масштабе',['Маленький','Средний','Крупный']],
+ ['dim','Затемнение в ночном режиме','Насколько ночной режим притемняет экран',['Нет','Слабое','Сильное']],
+ ['Датчики'],
+ ['smooth','Плавное движение','Успокаивает дрожание неба при работе датчиков'],
+ ['steady','Устойчивость','Насколько сильно гасится дрожание, пока вы держите телефон неподвижно. Выше — меньше дрожит, но дольше успокаивается',['Низкая','Средняя','Высокая']],
+ ['ease','Ослаблять при движении','Насколько ослабевает сглаживание, когда вы поворачиваете телефон, чтобы небо успевало за вами',['Нет','Умеренно','Сильно']],
+ ['mag','Магнитная поправка','Учитывать разницу между магнитным и истинным севером'],
+ ['decl','Магнитное склонение, °','Восточное — со знаком плюс. Для Казахстана обычно от +5 до +8°; точное значение для вашего места можно узнать в калькуляторе NOAA','num'],
+ ['view','Направление обзора','Поворот горизонта на 90° (для устройств с принудительной альбомной ориентацией) или режим указки: экран показывает то, на что направлен верх телефона',['Обычное','Поворот на 90°','Режим указки']]];
+function renderSettings(){const S2=st.set;$('#setbody').innerHTML=SETS.map(s=>{if(s.length===1)return`<div class="sec">${s[0]}</div>`;const [k,t,d,o]=s;
+  if(o==='num')return`<label class="set" for="set-${k}"><div class="t"><b>${t}</b><span>${d}</span></div><input type="number" id="set-${k}" data-k="${k}" step="0.5" min="-30" max="30" value="${S2[k]}"></label>`;
+  if(o)return`<button class="set" data-k="${k}"><div class="t"><b>${t}</b><span>${d}</span></div><div class="val">${o[S2[k]]}</div></button>`;
+  return`<button class="set" data-k="${k}" role="switch" aria-checked="${!!S2[k]}"><div class="t"><b>${t}</b><span>${d}</span></div><div class="sw"></div></button>`}).join('')+'<p class="note">Настройки сохраняются в этом браузере.</p>'}
+$('#setbody').addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(!b)return;const k=b.dataset.k,s=SETS.find(x=>x[0]===k);st.set[k]=s[3]?(st.set[k]+1)%s[3].length:(st.set[k]?0:1);store.set('set',st.set);renderSettings();const nb=$(`#setbody [data-k=${k}]`);if(nb)nb.focus();dirty=true});
+$('#setbody').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;const v=parseFloat(e.target.value);if(isFinite(v)){st.set[k]=Math.max(-30,Math.min(30,v));store.set('set',st.set)}});
+// search
+const KN={star:'звезда',planet:'планета',moon:'Луна',sun:'Солнце',dso:'объект Мессье',con:'созвездие',meteor:'метеорный поток'};
+function search(){const q=$('#q').value.trim().toLowerCase();setup(nowMs());
+  let list=q?[...bodies,...stars,...dsos,...cons,...mets].filter(o=>o.name.toLowerCase().includes(q)||(o.code&&o.code.toLowerCase()===q)||(o.code&&o.code.toLowerCase().startsWith(q))):[...bodies.filter(b=>b.kind!=='sun'),...stars.filter(s=>s.mag<1)];
+  list=list.slice(0,30);const ul=$('#res');ul.innerHTML='';
+  if(!list.length){ul.innerHTML='<li class="mute" style="padding:10px;text-align:left">Ничего не найдено</li>';return}
+  list.forEach(o=>{const li=document.createElement('li'),b=document.createElement('button'),a=altaz(o.v);b.innerHTML='<span></span><small></small>';b.firstChild.textContent=o.name;b.lastChild.textContent=KN[o.kind]+(a.alt>0?` · ${Math.round(a.alt)}°`:' · за горизонтом');b.onclick=()=>find(o);li.append(b);ul.append(li)})}
+$('#q').addEventListener('input',search);
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter'){const b=$('#res button');if(b)b.click()}});
+// time travel
+const sunObj=()=>bodies.find(b=>b.kind==='sun');
+function goTime(ms,rate=0,obj){st.off=ms-Date.now();st.rate=rate;closeSheets();dirty=true;if(obj){setup(ms);find(typeof obj==='function'?obj():obj)}}
+function events(){const now=Date.now();setup(now);const rs=riseSet(sunObj(),now),d=local(now),mid=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-st.place.tz*36e5;
+  const met=n=>mets.find(m=>m.name===n);
+  const ev=[['Сейчас','реальное время',now,1],['Закат',hm(rs.set),rs.set],['Полночь',dateStr(mid),mid],['Восход',hm(rs.rise),rs.rise],
+   ['Геминиды — пик','14 дек 2026, ночь',Date.UTC(2026,11,13,21),0,met('Геминиды')],['Квадрантиды — пик','4 янв 2027, перед рассветом',Date.UTC(2027,0,3,23),0,met('Квадрантиды')],['Лириды — пик','23 апр 2027, ночь',Date.UTC(2027,3,22,21),0,met('Лириды')],['Эта-Аквариды — пик','6 мая 2027, перед рассветом',Date.UTC(2027,4,5,23),0,met('Эта-Аквариды')],['Солнечное затмение','2 авг 2027 (полное в Египте и Аравии)',Date.UTC(2027,7,2,10,7),0,sunObj],['Персеиды — пик','13 авг 2027, ночь',Date.UTC(2027,7,12,21),0,met('Персеиды')]].filter(e=>e[2]>=now-6e4||e[0]==='Сейчас');
+  const box=$('#events');box.innerHTML='';ev.forEach(e=>{const b=document.createElement('button');b.className='ev';b.innerHTML='<span></span><small></small>';b.firstChild.textContent=e[0];b.lastChild.textContent=e[1];b.onclick=()=>{if(e[0]==='Сейчас'){st.off=0;st.rate=1;st.target=null;closeSheets();dirty=true}else goTime(e[2],e[3]||0,e[4])};box.append(b)})}
+function syncDT(){const d=local(nowMs());$('#dt').value=`${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`}
+$('#go-dt').onclick=()=>{const m=$('#dt').value.match(/(\d+)-(\d+)-(\d+)T(\d+):(\d+)/);if(!m)return;goTime(Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5])-st.place.tz*36e5,0)};
+const ri=()=>RATES.indexOf(st.rate);
+$('#t-rw').onclick=()=>{st.rate=RATES[Math.max(0,ri()-1)];dirty=true};$('#t-ff').onclick=()=>{st.rate=RATES[Math.min(RATES.length-1,ri()+1)];dirty=true};
+$('#t-pp').onclick=()=>{st.rate=st.rate===0?1:0;dirty=true};$('#t-now').onclick=()=>{st.off=0;st.rate=1;dirty=true};
+// place
+const sel=$('#city');sel.innerHTML=CITIES.map((c,i)=>`<option value="${i}">${c[0]}</option>`).join('');
+function setPlace(p){st.place=p;store.set('place',p);$('#lat').value=p.lat;$('#lon').value=p.lon;const i=CITIES.findIndex(c=>c[0]===p.name);sel.value=i<0?CITIES.length-1:i;dirty=true}
+sel.onchange=()=>{const c=CITIES[sel.value];if(c[1]!=null){setPlace({name:c[0],lat:c[1],lon:c[2],tz:c[3]});toast('Место: '+c[0])}};
+$('#apply').onclick=()=>{const la=+$('#lat').value,lo=+$('#lon').value;if(!isFinite(la)||!isFinite(lo)||Math.abs(la)>90||Math.abs(lo)>180)return;setPlace({name:'Свои координаты',lat:la,lon:lo,tz:-new Date().getTimezoneOffset()/60});toast('Координаты применены')};
+setPlace(st.place);showUI();
+
+// loop
+let lastT=performance.now(),lastTick=0;
+function loop(now){const dt=now-lastT;lastT=now;
+  if(st.rate!==1){st.off+=dt*(st.rate-1);if(st.rate!==0)dirty=true}
+  if(st.anim){const k=Math.min(1,(now-st.anim.t0)/800),e=1-(1-k)**3;st.az=st.anim.az0+st.anim.daz*e;st.alt=st.anim.al0+st.anim.dal*e;if(k>=1)st.anim=null;dirty=true}
+  if(now-lastTick>1e4){lastTick=now;dirty=true}
+  if(dirty)draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
